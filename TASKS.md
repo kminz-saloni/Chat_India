@@ -102,7 +102,7 @@ Messages can be encrypted before send and decrypted locally.
 ## Phase 4: Chat Core Module
 
 **Goal:** Functional realtime private chat.
-**Refer:** PRD.md, DB_SCHEMA.md, ARCHITECTURE.md
+**Refer:** PRD.md, DB_SCHEMA.md, ARCHITECTURE.md, API.md, Security_Checklist.md, UI.md
 
 ### Tasks
 

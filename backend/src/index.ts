@@ -7,25 +7,25 @@ import http from 'http';
 import { Server } from 'socket.io';
 import { connectDB } from '@/utils/db';
 import authRoutes from '@/routes/authRoutes';
+import chatRoutes from '@/routes/chatRoutes';
+import { registerSocketHandlers } from '@/socket/handlers';
 
 dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
+export const io = new Server(server, {
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     methods: ['GET', 'POST'],
   },
 });
 
-// ─── Security headers ─────────────────────────────────────────────────────────
+// ─── Security ─────────────────────────────────────────────────────────────────
 app.use(helmet());
-
-// ─── Global rate-limit ────────────────────────────────────────────────────────
 app.use(
   rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 min
+    windowMs: 15 * 60 * 1000,
     max: 200,
     standardHeaders: true,
     legacyHeaders: false,
@@ -33,22 +33,20 @@ app.use(
   }),
 );
 
-// ─── Core middleware ───────────────────────────────────────────────────────────
+// ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true }));
 app.use(express.json({ limit: '2mb' }));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
+app.use('/api', chatRoutes);
 
 app.get('/', (_req, res) => {
   res.json({ status: 'ok', app: 'Chat-India API' });
 });
 
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
-io.on('connection', (socket) => {
-  console.log('Socket connected:', socket.id);
-  socket.on('disconnect', () => console.log('Socket disconnected:', socket.id));
-});
+registerSocketHandlers(io);
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
@@ -60,5 +58,3 @@ connectDB()
     console.error('Failed to connect to DB:', err);
     process.exit(1);
   });
-
-export { io };

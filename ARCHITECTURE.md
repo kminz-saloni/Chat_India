@@ -2,77 +2,219 @@
 
 ## High Level Architecture
 
+```
 Client (Next.js Web App)
--> HTTPS / WebSocket
--> API Server (Node.js + Express)
--> MongoDB
--> Redis (presence, OTP, rate-limit)
+  │  Encrypts/Decrypts messages locally (libsodium)
+  │  Caches private key in memory only
+  │
+  ├── HTTPS ──────────────────► REST API  (Node.js + Express)
+  │                               │  Helmet, CORS, Rate-limit
+  │                               ├── MongoDB  (users, chats, messages, sessions)
+  │                               └── Redis    (OTP cache, online presence, rate-limits)
+  │
+  └── WebSocket ──────────────► Socket.IO Server (same Express process)
+                                  └── Rooms per chat, authenticated via JWT
+```
+
+---
 
 ## Components
 
-### Frontend (Next.js)
+### Frontend (Next.js + TypeScript)
 
-* Authentication screens
-* Chat UI
-* Local key generation
-* Encryption/decryption
-* Local secure cache
-* Session state
+| Layer | Responsibility |
+|---|---|
+| `src/app/` | Next.js App Router pages (auth, chat, settings, vault) |
+| `src/components/` | Shared UI components (CryptoUnlockBanner, Sidebar, MessageBubble, etc.) |
+| `src/context/` | React context — AuthContext (session + crypto state) |
+| `src/hooks/` | Custom hooks — useCrypto, useSocket, usePresence |
+| `src/lib/api.ts` | Typed fetch wrapper with Bearer token injection |
+| `src/lib/crypto.ts` | **All E2EE logic** — key generation, Argon2id, encrypt/decrypt |
+| `src/constants/` | Shared constants |
 
-### Backend (Express)
+### Backend (Express + TypeScript)
 
-* Auth APIs
-* OTP verification
-* User management
-* Chat APIs
-* Socket connections
-* Panic lock command routing
-* Cleanup jobs
+| Layer | Responsibility |
+|---|---|
+| `src/controllers/` | Business logic — auth, messages, chats, vault, panic |
+| `src/routes/` | Route declarations — auth, users, chats, messages, vault, panic |
+| `src/models/` | Mongoose models — User, OtpRequest, Session, Chat, Message |
+| `src/middleware/` | auth.ts (JWT), rateLimits |
+| `src/socket/` | Socket.IO event handlers — presence, typing, delivery |
+| `src/jobs/` | Cleanup jobs — expired message TTL, panic lock enforcement |
+| `src/utils/` | authHelpers, db connection |
 
 ### Realtime Layer
 
-Recommendation: Socket.IO (best balance of ease + docs + free deployment support).
-Alternative: native WebSocket.
+Socket.IO running on the same Express HTTP server.
 
-### Database
+Events (server → client):
+- `message:new` — new message delivered
+- `message:updated` — edit/delete propagated
+- `presence:online` / `presence:offline`
+- `typing:start` / `typing:stop`
+- `receipt:read` — read receipt update
+- `panic:lock` — emergency lock broadcast
 
-MongoDB stores users, chats, messages, sessions.
+Events (client → server):
+- `chat:join` — join a chat room
+- `typing:start` / `typing:stop`
+- `receipt:read` — mark messages read
 
-### Cache / Fast State
+### Database (MongoDB)
 
-Redis stores OTPs, online presence, rate limits, temporary events.
+Collections: `users`, `chats`, `messages`, `sessions`, `otp_requests`
+
+Key indexes: `users.phone (unique)`, `messages.chatId+createdAt`, `sessions.userId`, `chats.members`
+
+### Cache / Fast State (Redis)
+
+| Key pattern | Purpose |
+|---|---|
+| `otp:{phone}` | OTP hash + expiry |
+| `online:{userId}` | Online presence flag |
+| `ratelimit:{ip}` | OTP request rate limiting |
 
 ### Deployment
 
-* Frontend: Vercel
-* Backend: Azure App Service / Azure Container Apps / VM
-* MongoDB Atlas (free tier if needed)
-* Redis free provider if available
+- **Frontend**: Vercel (Next.js)
+- **Backend**: Azure App Service / Azure Container Apps
+- **Database**: MongoDB Atlas
+- **Cache**: Upstash Redis (free tier)
 
-## Security Flow
+---
 
-1. Generate keys in browser.
-2. Upload public key.
-3. Encrypt private key with password-derived key.
-4. Encrypt messages using recipient public key.
-5. Decrypt locally only.
+## Crypto Layer (Phase 3 — Implemented)
 
-## Suggested Folder Structure
+### Algorithm Choices
 
-```text
+| Purpose | Algorithm | Library |
+|---|---|---|
+| Key pair generation | X25519 (curve25519) | libsodium `crypto_box_keypair` |
+| Password key derivation | Argon2id | libsodium `crypto_pwhash` |
+| Private key encryption | XSalsa20-Poly1305 | libsodium `crypto_secretbox_easy` |
+| Message encryption | X25519 + XSalsa20-Poly1305 | libsodium `crypto_box_easy` |
+
+### Key Lifecycle
+
+```
+Registration:
+  Browser generates X25519 keypair
+      │
+      ├── publicKey ─────────────────────────► stored on server (plaintext, public)
+      └── privateKey
+              │
+              ▼ Argon2id(password, random_salt) → 32-byte derived key
+              │
+              ▼ XSalsa20-Poly1305 encrypt
+              │
+              └── encryptedPrivateKey bundle ─► stored on server (encrypted)
+                  (salt | nonce | ciphertext)
+
+Login:
+  Download encryptedPrivateKey
+      │
+      ▼ Argon2id(password, salt) → derived key
+      │
+      ▼ Decrypt → raw privateKey
+      │
+      └── Cached in-memory ONLY (cleared on logout/tab close)
+```
+
+### Message Encryption Flow
+
+```
+Sender:
+  Generate ephemeral X25519 keypair (per-message — forward secrecy)
+      │
+      ▼ crypto_box_easy(plaintext, nonce, recipientPublicKey, ephemeralPrivKey)
+      │
+      └── packed ciphertext = base64(nonce | ephemeralPublicKey | ciphertext)
+              │
+              ▼ transmitted to server (server sees only ciphertext)
+
+Receiver:
+  Unpack ciphertext → nonce, ephemeralPublicKey, ciphertext
+      │
+      ▼ crypto_box_open_easy(ciphertext, nonce, ephemeralPublicKey, cachedPrivateKey)
+      │
+      └── plaintext displayed locally
+```
+
+### Security Properties
+
+- **Zero-knowledge server**: server stores only ciphertext and public keys
+- **Forward secrecy**: per-message ephemeral keys mean past messages cannot be decrypted even if long-term keys are compromised
+- **Memory safety**: private key zeroed on logout via `Uint8Array.fill(0)`
+- **Wrong-password recovery**: `CryptoUnlockBanner` prompts re-entry without logout
+
+---
+
+## Security Layer (Implemented)
+
+| Concern | Mitigation |
+|---|---|
+| Security headers | `helmet` middleware on all responses |
+| Rate limiting | `express-rate-limit` — 200 req/15min global, stricter on OTP |
+| OTP brute force | Max 5 attempts, then record deleted |
+| OTP expiry | 5-minute TTL, auto-deleted from DB |
+| Password storage | bcrypt (cost 12) |
+| JWT | 30-day expiry, per-session revocation in DB |
+| CORS | Restricted to `FRONTEND_URL` env variable |
+| Input validation | All endpoints validate required fields |
+| Soft deletes | Users and sessions soft-deleted, not hard-dropped |
+
+---
+
+## Folder Structure (Actual)
+
+```
 chat-india/
   frontend/
-    src/app/
-    src/components/
-    src/lib/
-    src/hooks/
+    src/
+      app/
+        auth/login/
+        auth/register/
+        chat/              ← Phase 4
+        settings/sessions/
+        vault/             ← Phase 6
+      components/
+        CryptoUnlockBanner.tsx
+      context/
+        AuthContext.tsx
+      hooks/
+        useCrypto.ts
+        useSocket.ts       ← Phase 4
+      lib/
+        api.ts
+        crypto.ts
+      constants/
   backend/
-    src/controllers/
-    src/routes/
-    src/services/
-    src/middleware/
-    src/models/
-    src/socket/
-    src/jobs/
-    src/utils/
+    src/
+      controllers/
+        authController.ts
+        chatController.ts  ← Phase 4
+        messageController.ts ← Phase 4
+        userController.ts  ← Phase 4
+      routes/
+        authRoutes.ts
+        chatRoutes.ts      ← Phase 4
+        messageRoutes.ts   ← Phase 4
+        userRoutes.ts      ← Phase 4
+      models/
+        User.ts
+        OtpRequest.ts
+        Session.ts
+        Chat.ts            ← Phase 4
+        Message.ts         ← Phase 4
+      middleware/
+        auth.ts
+      socket/
+        handlers.ts        ← Phase 4
+      jobs/
+        cleanupExpired.ts  ← Phase 7
+      utils/
+        authHelpers.ts
+        db.ts
+      constants/
 ```
