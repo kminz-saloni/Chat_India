@@ -1,26 +1,181 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a0a0f;
+  --foreground: #e8e8f0;
+  --surface: #12121a;
+  --surface-2: #1a1a26;
+  --border: rgba(255, 255, 255, 0.08);
+  --primary: #6c63ff;
+  --primary-hover: #7c74ff;
+  --primary-glow: rgba(108, 99, 255, 0.35);
+  --accent: #ff6b9d;
+  --success: #4ade80;
+  --error: #f87171;
+  --muted: rgba(255, 255, 255, 0.45);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
+html, body {
+  height: 100%;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Glass card */
+.glass {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #6c63ff 0%, #ff6b9d 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Input */
+.input-field {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 14px 16px;
+  color: var(--foreground);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-field::placeholder {
+  color: var(--muted);
+}
+.input-field:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+/* Button */
+.btn-primary {
+  width: 100%;
+  background: linear-gradient(135deg, #6c63ff, #9b5de5);
+  border: none;
+  border-radius: 12px;
+  padding: 14px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
+  box-shadow: 0 4px 20px var(--primary-glow);
+}
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 28px var(--primary-glow);
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Error badge */
+.error-badge {
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--error);
+}
+
+/* Auth background */
+.auth-bg {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(108, 99, 255, 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 90%, rgba(255, 107, 157, 0.14) 0%, transparent 60%),
+    var(--background);
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  padding: 40px;
+}
+
+/* OTP grid */
+.otp-grid {
+  display: flex;
+  gap: 10px;
+}
+.otp-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 16px 0;
+  color: var(--foreground);
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.otp-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+/* Link */
+.text-link {
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+.text-link:hover {
+  color: var(--primary-hover);
+}
+
+/* Spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+/* Fade in */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fadeInUp 0.4s ease both;
 }
