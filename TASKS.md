@@ -134,19 +134,19 @@ Two users can chat in realtime with status indicators.
 ## Phase 5: Message Controls
 
 **Goal:** Improve usability and control.
-**Refer:** SRS.md, DB_SCHEMA.md
+**Refer:** SRS.md, DB_SCHEMA.md, API.md, UI.md
 
 ### Tasks
 
-* Add sender edit message action.
-* Update ciphertext on edit flow.
-* Add delete for everyone action.
-* Add delete for self action (optional).
-* Add emoji reaction picker.
-* Store reactions in message document.
-* Realtime reaction updates.
-* Add chat search UI.
-* Add message keyword search API.
+* [x] Add sender edit message action.
+* [x] Update ciphertext on edit flow.
+* [x] Add delete for everyone action.
+* [ ] Add delete for self action (optional).
+* [x] Add emoji reaction picker.
+* [x] Store reactions in message document.
+* [x] Realtime reaction updates.
+* [x] Add chat search UI.
+* [x] Add message keyword search API (implemented local E2EE search).
 
 ### Deliverable
 

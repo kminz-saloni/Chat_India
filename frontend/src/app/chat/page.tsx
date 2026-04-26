@@ -35,6 +35,7 @@ export interface Message {
   deleted: boolean;
   edited: boolean;
   selfDestructAt?: string;
+  reactions?: { userId: string; emoji: string }[];
 }
 
 export default function ChatPage() {
@@ -117,9 +118,33 @@ export default function ChatPage() {
       }
     });
 
+    const offMsgUpdate = onEvent<any>('message:updated', (update) => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m._id !== update.messageId) return m;
+          
+          if (update.type === 'edit') {
+            if (cryptoReady && update.ciphertext) {
+              decrypt(update.ciphertext)
+                .then((pt) => setDecryptedCache((c) => ({ ...c, [m._id]: pt })))
+                .catch(() => setDecryptedCache((c) => ({ ...c, [m._id]: '[Encrypted]' })));
+            }
+            return { ...m, ciphertext: update.ciphertext, edited: true };
+          }
+          if (update.type === 'delete') {
+            return { ...m, deleted: true, ciphertext: '', edited: false, reactions: [] };
+          }
+          if (update.type === 'reaction') {
+            return { ...m, reactions: update.reactions };
+          }
+          return m;
+        })
+      );
+    });
+
     return () => {
       offNewMsg(); offTypingStart(); offTypingStop();
-      offOnline(); offOffline(); offReceipt();
+      offOnline(); offOffline(); offReceipt(); offMsgUpdate();
     };
   }, [activeChatId, cryptoReady, onEvent, sendReadReceipt, decrypt, loadChats]);
 
@@ -232,6 +257,53 @@ export default function ChatPage() {
     }
   }
 
+  async function handleEditMessage(messageId: string, newPlaintext: string) {
+    if (!activeContact?.publicKey || !token) return;
+    const { encryptAndPackMessage } = await import('@/lib/crypto');
+    const ciphertext = await encryptAndPackMessage(newPlaintext, activeContact.publicKey);
+    
+    // Optimistic
+    setDecryptedCache((prev) => ({ ...prev, [messageId]: newPlaintext }));
+    setMessages((prev) => prev.map(m => m._id === messageId ? { ...m, edited: true } : m));
+    
+    try {
+      await apiRequest(`/messages/${messageId}`, {
+        method: 'PATCH',
+        token,
+        body: { ciphertext },
+      });
+    } catch { /* noop */ }
+  }
+
+  async function handleDeleteMessage(messageId: string) {
+    if (!token) return;
+    // Optimistic
+    setMessages((prev) => prev.map(m => m._id === messageId ? { ...m, deleted: true, ciphertext: '', edited: false, reactions: [] } : m));
+    try {
+      await apiRequest(`/messages/${messageId}`, {
+        method: 'DELETE',
+        token,
+      });
+    } catch { /* noop */ }
+  }
+
+  async function handleReactMessage(messageId: string, emoji: string) {
+    if (!token) return;
+    // Optimistic - we'll just send to server and let it update via socket or local state isn't strictly needed if socket is fast, but let's do optimistic
+    setMessages((prev) => prev.map(m => {
+      if (m._id !== messageId) return m;
+      const existing = m.reactions?.filter(r => r.userId !== user?.id) || [];
+      return { ...m, reactions: emoji ? [...existing, { userId: user?.id || '', emoji }] : existing };
+    }));
+    try {
+      await apiRequest(`/messages/${messageId}/react`, {
+        method: 'POST',
+        token,
+        body: { emoji },
+      });
+    } catch { /* noop */ }
+  }
+
   const isContactOnline = activeContact ? !!onlineUsers[activeContact._id] : false;
   const isContactTyping = activeContact ? !!typingUsers[activeContact._id] : false;
 
@@ -269,6 +341,9 @@ export default function ChatPage() {
           onSend={handleSendMessage}
           onTypingStart={() => activeChatId && sendTypingStart(activeChatId)}
           onTypingStop={() => activeChatId && sendTypingStop(activeChatId)}
+          onEdit={handleEditMessage}
+          onDelete={handleDeleteMessage}
+          onReact={handleReactMessage}
         />
       </div>
     </div>

@@ -8,6 +8,7 @@ import { Server } from 'socket.io';
 import { connectDB } from '@/utils/db';
 import authRoutes from '@/routes/authRoutes';
 import chatRoutes from '@/routes/chatRoutes';
+import messageRoutes from '@/routes/messageRoutes';
 import { registerSocketHandlers } from '@/socket/handlers';
 
 dotenv.config();
@@ -39,6 +40,7 @@ app.use(express.json({ limit: '2mb' }));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
+app.use('/api/messages', messageRoutes);
 app.use('/api', chatRoutes);
 
 app.get('/', (_req, res) => {

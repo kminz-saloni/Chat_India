@@ -16,15 +16,22 @@ interface Props {
   onSend: (text: string) => Promise<void>;
   onTypingStart: () => void;
   onTypingStop: () => void;
+  onEdit: (id: string, text: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  onReact: (id: string, emoji: string) => Promise<void>;
 }
 
 export default function MessageArea({
   chat, messages, decryptedCache, currentUserId,
   isOnline, isTyping, loading, hasMore,
   onLoadMore, onSend, onTypingStart, onTypingStop,
+  onEdit, onDelete, onReact,
 }: Props) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [editMessageId, setEditMessageId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -53,7 +60,12 @@ export default function MessageArea({
     onTypingStop();
     setSending(true);
     try {
-      await onSend(text);
+      if (editMessageId) {
+        await onEdit(editMessageId, text);
+        setEditMessageId(null);
+      } else {
+        await onSend(text);
+      }
     } finally {
       setSending(false);
     }
@@ -104,10 +116,23 @@ export default function MessageArea({
             {isTyping ? '✍️ typing…' : isOnline ? '● Online' : 'Offline'}
           </p>
         </div>
-        <div style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => { setShowSearch(!showSearch); setSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 16 }} title="Search chat">🔍</button>
           🔒 E2EE
         </div>
       </div>
+
+      {showSearch && (
+        <div style={{ padding: '8px 20px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border)' }}>
+          <input
+            type="text"
+            placeholder="Search messages..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ width: '100%', padding: '6px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--foreground)', outline: 'none' }}
+          />
+        </div>
+      )}
 
       {/* Messages */}
       <div
@@ -132,10 +157,14 @@ export default function MessageArea({
             <p>No messages yet. Say hello!</p>
           </div>
         ) : (
-          messages.map((msg, i) => {
+          messages.filter(msg => {
+            if (!searchQuery) return true;
+            const text = decryptedCache[msg._id];
+            return text && text.toLowerCase().includes(searchQuery.toLowerCase());
+          }).map((msg, i, arr) => {
             const isMine = msg.senderId === currentUserId;
             const text = decryptedCache[msg._id];
-            const showDate = i === 0 || !isSameDay(messages[i - 1].createdAt, msg.createdAt);
+            const showDate = i === 0 || !isSameDay(arr[i - 1].createdAt, msg.createdAt);
             return (
               <div key={msg._id}>
                 {showDate && (
@@ -145,7 +174,15 @@ export default function MessageArea({
                     </span>
                   </div>
                 )}
-                <MessageBubble msg={msg} isMine={isMine} text={text} />
+                <MessageBubble 
+                  msg={msg} 
+                  isMine={isMine} 
+                  text={text} 
+                  currentUserId={currentUserId}
+                  onEdit={(text) => { setEditMessageId(msg._id); setInput(text); }}
+                  onDelete={() => onDelete(msg._id)}
+                  onReact={(emoji) => onReact(msg._id, emoji)}
+                />
               </div>
             );
           })
@@ -154,12 +191,18 @@ export default function MessageArea({
       </div>
 
       {/* Composer */}
+      {editMessageId && (
+        <div style={{ padding: '8px 16px', background: 'rgba(108,99,255,0.1)', color: 'var(--muted)', fontSize: 13, display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)' }}>
+          <span>Editing message</span>
+          <button onClick={() => { setEditMessageId(null); setInput(''); }} style={{ background: 'none', border: 'none', color: 'var(--foreground)', cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
       <form
         onSubmit={handleSend}
         style={{
           display: 'flex', alignItems: 'flex-end', gap: 10,
           padding: '12px 16px',
-          borderTop: '1px solid var(--border)',
+          borderTop: editMessageId ? 'none' : '1px solid var(--border)',
           background: 'var(--surface)',
           flexShrink: 0,
         }}
@@ -210,41 +253,106 @@ export default function MessageArea({
   );
 }
 
-function MessageBubble({ msg, isMine, text }: { msg: Message; isMine: boolean; text?: string }) {
+function MessageBubble({ 
+  msg, isMine, text, currentUserId, onEdit, onDelete, onReact 
+}: { 
+  msg: Message; isMine: boolean; text?: string; currentUserId: string;
+  onEdit: (text: string) => void;
+  onDelete: () => void;
+  onReact: (emoji: string) => void;
+}) {
   const isOpt = msg._id.startsWith('opt-');
   const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const [showActions, setShowActions] = useState(false);
+  const emojis = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+
+  // Aggregate reactions
+  const reactionCounts: Record<string, number> = {};
+  msg.reactions?.forEach(r => {
+    reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+  });
+  const myReaction = msg.reactions?.find(r => r.userId === currentUserId)?.emoji;
 
   return (
-    <div style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', marginBottom: 2 }}>
-      <div style={{
-        maxWidth: '70%',
-        background: isMine
-          ? 'linear-gradient(135deg, rgba(108,99,255,0.8), rgba(155,93,229,0.8))'
-          : 'rgba(255,255,255,0.07)',
-        borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-        padding: '10px 14px',
-        backdropFilter: 'blur(8px)',
-        border: isMine ? 'none' : '1px solid var(--border)',
-      }}>
-        {msg.deleted ? (
-          <p style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic' }}>Message deleted</p>
-        ) : text === undefined ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span className="spinner" style={{ width: 10, height: 10 }} />
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Decrypting…</span>
-          </div>
-        ) : (
-          <p style={{ fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{text}</p>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 4 }}>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{time}</span>
-          {isMine && (
-            <span style={{ fontSize: 11, color: msg.status === 'read' ? '#6c63ff' : 'rgba(255,255,255,0.4)' }}>
-              {isOpt ? '○' : msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
-            </span>
+    <div 
+      style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', marginBottom: 2 }}
+      onMouseEnter={() => !msg.deleted && setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
+    >
+      <div style={{ display: 'flex', flexDirection: isMine ? 'row-reverse' : 'row', alignItems: 'center', gap: 8, maxWidth: '85%' }}>
+        
+        {/* Message Bubble */}
+        <div style={{
+          background: isMine
+            ? 'linear-gradient(135deg, rgba(108,99,255,0.8), rgba(155,93,229,0.8))'
+            : 'rgba(255,255,255,0.07)',
+          borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+          padding: '10px 14px',
+          backdropFilter: 'blur(8px)',
+          border: isMine ? 'none' : '1px solid var(--border)',
+          position: 'relative',
+        }}>
+          {msg.deleted ? (
+            <p style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic' }}>Message deleted</p>
+          ) : text === undefined ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span className="spinner" style={{ width: 10, height: 10 }} />
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>Decrypting…</span>
+            </div>
+          ) : (
+            <p style={{ fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{text}</p>
           )}
-          {msg.edited && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>edited</span>}
+          
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 4 }}>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{time}</span>
+            {isMine && (
+              <span style={{ fontSize: 11, color: msg.status === 'read' ? '#6c63ff' : 'rgba(255,255,255,0.4)' }}>
+                {isOpt ? '○' : msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
+              </span>
+            )}
+            {msg.edited && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginLeft: 4 }}>edited</span>}
+          </div>
+
+          {/* Reactions Display */}
+          {!msg.deleted && msg.reactions && msg.reactions.length > 0 && (
+            <div style={{
+              display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap',
+              position: 'absolute', bottom: -12, [isMine ? 'right' : 'left']: 16,
+              background: 'var(--surface)', padding: '2px 6px', borderRadius: 10, border: '1px solid var(--border)'
+            }}>
+              {Object.entries(reactionCounts).map(([emoji, count]) => (
+                <span 
+                  key={emoji} 
+                  style={{ fontSize: 11, cursor: 'pointer', opacity: myReaction === emoji ? 1 : 0.7 }}
+                  onClick={() => onReact(myReaction === emoji ? '' : emoji)} // toggle
+                >
+                  {emoji} {count > 1 ? count : ''}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* Action Menu */}
+        {showActions && !isOpt && (
+          <div style={{ display: 'flex', gap: 4, background: 'var(--surface)', padding: '4px 8px', borderRadius: 20, border: '1px solid var(--border)', fontSize: 14 }}>
+            {emojis.map(e => (
+              <span 
+                key={e} 
+                style={{ cursor: 'pointer', padding: '0 2px', filter: myReaction === e ? 'none' : 'grayscale(100%)', opacity: myReaction === e ? 1 : 0.6 }}
+                onClick={() => { onReact(myReaction === e ? '' : e); setShowActions(false); }}
+                title="React"
+              >{e}</span>
+            ))}
+            {isMine && text !== undefined && (
+              <>
+                <div style={{ width: 1, background: 'var(--border)', margin: '0 4px' }} />
+                <button onClick={() => { onEdit(text); setShowActions(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: '0 4px' }} title="Edit">✏️</button>
+                <button onClick={() => { if(confirm('Delete for everyone?')) { onDelete(); setShowActions(false); } }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ff4d4f', padding: '0 4px' }} title="Delete">🗑️</button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
