@@ -161,25 +161,25 @@ Users can manage and react to messages.
 ## Phase 6: Privacy Module
 
 **Goal:** Ship the main USP features.
-**Refer:** PRD.md, SRS.md, ARCHITECTURE.md
+**Refer:** PRD.md, SRS.md, ARCHITECTURE.md, Security_Checklist.md, UI.md, API.md
 
 ### Tasks
 
-* Add move chat to Vault action.
-* Hide vaulted chats from main list.
-* Build Vault screen.
-* Build unlock with PIN.
-* Build unlock with password fallback.
-* Hash and verify vault credentials.
-* Mark trusted device/session.
-* Detect secret panic command.
-* Validate sender is trusted.
-* Trigger server panic event.
-* Lock all active clients instantly.
-* Hide notifications UI state.
-* Wipe local cached chats.
-* Force logout all sessions.
-* Build recovery unlock flow.
+* [x] Add move chat to Vault action.
+* [x] Hide vaulted chats from main list.
+* [x] Build Vault screen.
+* [x] Build unlock with PIN.
+* [x] Build unlock with password fallback.
+* [x] Hash and verify vault credentials.
+* [x] Mark trusted device/session.
+* [x] Detect secret panic command.
+* [x] Validate sender is trusted.
+* [x] Trigger server panic event.
+* [x] Lock all active clients instantly.
+* [x] Hide notifications UI state.
+* [x] Wipe local cached chats.
+* [x] Force logout all sessions.
+* [x] Build recovery unlock flow.
 
 ### Deliverable
 
@@ -194,18 +194,18 @@ Vault and Panic Lock fully demo-ready.
 ## Phase 7: Self-Destruct Module
 
 **Goal:** Timed disappearing messages.
-**Refer:** SRS.md, DB_SCHEMA.md
+**Refer:** SRS.md, DB_SCHEMA.md, API.md, UI.md, ARCHITECTURE.md, Security_Checklist.md
 
 ### Tasks
 
-* Add timer selector in composer.
-* Support presets (10s, 1m, 1h).
-* Attach expiry timestamp to message.
-* Create cleanup scheduler/job.
-* Delete expired messages from database.
-* Emit realtime remove event.
-* Remove from sender and receiver UI.
-* Handle offline user sync after deletion.
+* [x] Add timer selector in composer.
+* [x] Support presets (10s, 1m, 1h).
+* [x] Attach expiry timestamp to message.
+* [x] Create cleanup scheduler/job.
+* [x] Delete expired messages from database.
+* [x] Emit realtime remove event.
+* [x] Remove from sender and receiver UI.
+* [x] Handle offline user sync after deletion.
 
 ### Deliverable
 
@@ -220,20 +220,20 @@ Timed messages disappear automatically.
 ## Phase 8: UI/UX Polish
 
 **Goal:** Make product feel premium.
-**Refer:** PRD.md
+**Refer:** PRD.md, UI.md, ARCHITECTURE.md
 
 ### Tasks
 
-* Add dark mode.
-* Improve spacing and typography.
-* Add responsive mobile web layout.
-* Add skeleton loaders.
-* Add empty states.
-* Add retry states for failures.
-* Improve toast notifications.
-* Add smooth animations.
-* Improve accessibility labels.
-* Optimize perceived performance.
+* [x] Add dark mode.
+* [x] Improve spacing and typography.
+* [x] Add responsive mobile web layout.
+* [x] Add skeleton loaders.
+* [x] Add empty states.
+* [x] Add retry states for failures.
+* [x] Improve toast notifications.
+* [x] Add smooth animations.
+* [x] Improve accessibility labels.
+* [x] Optimize perceived performance.
 
 ### Deliverable
 
@@ -252,19 +252,19 @@ Clean polished user experience.
 
 ### Tasks
 
-* Test signup/login flow.
-* Test invalid OTP cases.
-* Test reconnect after refresh.
-* Test send/receive chat flow.
-* Test presence and typing.
-* Test edit/delete flows.
-* Test vault lock/unlock.
-* Test panic lock from trusted device.
-* Test self-destruct expiry.
-* Test session logout all devices.
-* Test account deletion.
-* Cross-browser sanity check.
-* Final regression pass.
+* [x] Test signup/login flow.
+* [x] Test invalid OTP cases.
+* [x] Test reconnect after refresh.
+* [x] Test send/receive chat flow.
+* [x] Test presence and typing.
+* [x] Test edit/delete flows.
+* [x] Test vault lock/unlock.
+* [x] Test panic lock from trusted device.
+* [x] Test self-destruct expiry.
+* [x] Test session logout all devices.
+* [x] Test account deletion.
+* [x] Cross-browser sanity check.
+* [x] Final regression pass.
 
 ### Deliverable
 

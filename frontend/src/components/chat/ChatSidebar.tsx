@@ -12,10 +12,15 @@ interface Props {
   onlineUsers: Record<string, boolean>;
   token: string;
   onChatCreated: () => void;
+  showVault?: boolean;
+  onToggleVault?: () => void;
+  onMoveToVault?: (chatId: string) => void;
+  onPanic?: () => void;
 }
 
 export default function ChatSidebar({
   chats, activeChatId, onSelectChat, loading, onlineUsers, token, onChatCreated,
+  showVault, onToggleVault, onMoveToVault, onPanic,
 }: Props) {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Contact[]>([]);
@@ -57,8 +62,16 @@ export default function ChatSidebar({
       {/* Header */}
       <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <h2 className="gradient-text" style={{ fontSize: 18, fontWeight: 800 }}>💬 Chats</h2>
-          <a href="/settings/sessions" style={{ fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>⚙️</a>
+          <h2 className="gradient-text" style={{ fontSize: 18, fontWeight: 800 }}>
+            {showVault ? '🔐 Vault' : '💬 Chats'}
+          </h2>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button aria-label="Trigger Panic Lock" onClick={onPanic} title="Panic Lock" style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 14, transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>⚠️</button>
+            <button aria-label={showVault ? 'Exit Vault' : 'Enter Vault'} onClick={onToggleVault} title={showVault ? 'Exit Vault' : 'Enter Vault'} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 14, transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
+              {showVault ? '🔓' : '🔐'}
+            </button>
+            <a href="/settings/sessions" aria-label="Settings" style={{ fontSize: 14, color: 'var(--muted)', textDecoration: 'none', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'rotate(30deg)'} onMouseLeave={e => e.currentTarget.style.transform = 'rotate(0)'}>⚙️</a>
+          </div>
         </div>
         {/* Search */}
         <input
@@ -102,14 +115,24 @@ export default function ChatSidebar({
       {/* Chat list */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {loading ? (
-          <div style={{ padding: 32, textAlign: 'center' }}>
-            <span className="spinner" />
+          <div>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', opacity: 1 - i * 0.15 }}>
+                <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }} />
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ width: '60%', height: 14, borderRadius: 4, background: 'rgba(255,255,255,0.05)' }} />
+                  <div style={{ width: '40%', height: 10, borderRadius: 4, background: 'rgba(255,255,255,0.03)' }} />
+                </div>
+              </div>
+            ))}
           </div>
         ) : chats.length === 0 ? (
-          <div style={{ padding: 32, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
-            <p style={{ fontSize: 28, marginBottom: 8 }}>🔐</p>
-            <p>No chats yet.</p>
-            <p style={{ marginTop: 4 }}>Search a phone number above to start a secure chat.</p>
+          <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+              {showVault ? '📭' : '💬'}
+            </div>
+            <p style={{ fontWeight: 600, color: 'var(--foreground)', marginTop: 8 }}>{showVault ? 'Vault is empty' : 'No chats yet'}</p>
+            <p style={{ lineHeight: 1.5, fontSize: 13 }}>Search a phone number above to start a secure chat.</p>
           </div>
         ) : (
           chats.map((chat) => (
@@ -119,6 +142,8 @@ export default function ChatSidebar({
               active={chat._id === activeChatId}
               online={!!onlineUsers[chat.contact?._id]}
               onClick={() => onSelectChat(chat)}
+              onMoveToVault={onMoveToVault ? () => onMoveToVault(chat._id) : undefined}
+              inVault={showVault}
             />
           ))
         )}
@@ -127,22 +152,26 @@ export default function ChatSidebar({
   );
 }
 
-function ChatRow({ chat, active, online, onClick }: { chat: ChatItem; active: boolean; online: boolean; onClick: () => void }) {
+function ChatRow({ chat, active, online, onClick, onMoveToVault, inVault }: { chat: ChatItem; active: boolean; online: boolean; onClick: () => void; onMoveToVault?: () => void; inVault?: boolean }) {
   const name = chat.contact?.name ?? 'Unknown';
   const time = chat.updatedAt ? new Date(chat.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  const [hovered, setHovered] = useState(false);
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`Chat with ${name}`}
       onClick={onClick}
       style={{
         display: 'flex', alignItems: 'center', gap: 12,
         padding: '12px 16px', cursor: 'pointer',
         background: active ? 'rgba(108,99,255,0.12)' : 'transparent',
         borderLeft: active ? '3px solid var(--primary)' : '3px solid transparent',
-        transition: 'background 0.15s',
+        transition: 'background 0.2s ease, border-color 0.2s ease',
       }}
-      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
-      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+      onMouseEnter={(e) => { setHovered(true); if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+      onMouseLeave={(e) => { setHovered(false); if (!active) e.currentTarget.style.background = 'transparent'; }}
     >
       <div style={{ position: 'relative', flexShrink: 0 }}>
         <Avatar name={name} size={42} />
@@ -155,7 +184,7 @@ function ChatRow({ chat, active, online, onClick }: { chat: ChatItem; active: bo
           }} />
         )}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <p style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</p>
           <span style={{ fontSize: 11, color: 'var(--muted)', flexShrink: 0, marginLeft: 6 }}>{time}</span>
@@ -163,6 +192,30 @@ function ChatRow({ chat, active, online, onClick }: { chat: ChatItem; active: bo
         <p style={{ fontSize: 12, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
           🔒 Encrypted
         </p>
+
+        {hovered && onMoveToVault && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onMoveToVault();
+            }}
+            title={inVault ? "Remove from Vault" : "Move to Vault"}
+            style={{
+              position: 'absolute',
+              right: 0,
+              bottom: 0,
+              background: 'var(--surface-2)',
+              border: '1px solid var(--border)',
+              borderRadius: 4,
+              padding: '2px 6px',
+              fontSize: 10,
+              cursor: 'pointer',
+              color: 'var(--muted)'
+            }}
+          >
+            {inVault ? "Remove" : "Move to Vault"}
+          </button>
+        )}
       </div>
     </div>
   );

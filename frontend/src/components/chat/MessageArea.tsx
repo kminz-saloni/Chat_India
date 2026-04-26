@@ -13,22 +13,24 @@ interface Props {
   loading: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
-  onSend: (text: string) => Promise<void>;
+  onSend: (text: string, expirySeconds?: number) => Promise<void>;
   onTypingStart: () => void;
   onTypingStop: () => void;
   onEdit: (id: string, text: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onReact: (id: string, emoji: string) => Promise<void>;
+  onBack?: () => void;
 }
 
 export default function MessageArea({
   chat, messages, decryptedCache, currentUserId,
   isOnline, isTyping, loading, hasMore,
   onLoadMore, onSend, onTypingStart, onTypingStop,
-  onEdit, onDelete, onReact,
+  onEdit, onDelete, onReact, onBack,
 }: Props) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [expirySeconds, setExpirySeconds] = useState<number>(0);
   const [editMessageId, setEditMessageId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -64,7 +66,7 @@ export default function MessageArea({
         await onEdit(editMessageId, text);
         setEditMessageId(null);
       } else {
-        await onSend(text);
+        await onSend(text, expirySeconds > 0 ? expirySeconds : undefined);
       }
     } finally {
       setSending(false);
@@ -80,11 +82,25 @@ export default function MessageArea({
 
   if (!chat) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'var(--muted)' }}>
-        <div style={{ fontSize: 56 }}>🔐</div>
-        <p style={{ fontSize: 20, fontWeight: 700, color: 'var(--foreground)' }}>Chat-India</p>
-        <p style={{ fontSize: 14 }}>Select a chat or search for a contact to get started</p>
-        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>All messages are end-to-end encrypted</p>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, color: 'var(--muted)', background: 'var(--background)' }}>
+        <div style={{ 
+          fontSize: 64, 
+          background: 'var(--surface-2)', 
+          width: 120, height: 120, 
+          display: 'flex', alignItems: 'center', justifyContent: 'center', 
+          borderRadius: '50%', border: '1px solid var(--border)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          marginBottom: 16
+        }}>
+          🔐
+        </div>
+        <h2 style={{ fontSize: 24, fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>Chat-India</h2>
+        <p style={{ fontSize: 15, maxWidth: 300, textAlign: 'center', lineHeight: 1.5 }}>
+          Select a conversation from the sidebar or start a new encrypted chat to begin messaging.
+        </p>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', marginTop: 24, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ color: 'var(--success)' }}>●</span> End-to-end Encrypted
+        </p>
       </div>
     );
   }
@@ -97,18 +113,28 @@ export default function MessageArea({
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12,
-        padding: '14px 20px',
-        borderBottom: '1px solid var(--border)',
-        background: 'var(--surface)',
-        flexShrink: 0,
+        padding: '16px 20px', background: 'var(--surface)', borderBottom: '1px solid var(--border)', zIndex: 10
       }}>
+        {onBack && (
+          <button 
+            onClick={onBack}
+            style={{ 
+              background: 'none', border: 'none', color: 'var(--foreground)', 
+              cursor: 'pointer', padding: '8px', marginRight: -4, marginLeft: -8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: '50%'
+            }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          </button>
+        )}
         <div style={{
-          width: 40, height: 40, borderRadius: '50%',
-          background: `hsl(${hue},60%,40%)`,
+          width: 44, height: 44, borderRadius: '50%',
+          background: `hsl(${hue}, 60%, 40%)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontWeight: 700, fontSize: 16, color: '#fff',
+          fontSize: 18, fontWeight: 600, color: '#fff'
         }}>
-          {name[0]?.toUpperCase()}
+          {name.charAt(0).toUpperCase()}
         </div>
         <div>
           <p style={{ fontWeight: 700, fontSize: 15 }}>{name}</p>
@@ -150,11 +176,20 @@ export default function MessageArea({
         )}
 
         {loading && messages.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 32 }}><span className="spinner" /></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 0' }}>
+            {[1, 2, 3].map((i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: i % 2 === 0 ? 'flex-end' : 'flex-start', opacity: 1 - i * 0.2 }}>
+                <div style={{ width: 180 + (i * 30), height: 44, borderRadius: i % 2 === 0 ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: 'rgba(255,255,255,0.05)' }} />
+              </div>
+            ))}
+          </div>
         ) : messages.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 32, color: 'var(--muted)', fontSize: 13 }}>
-            <p style={{ fontSize: 28, marginBottom: 8 }}>👋</p>
-            <p>No messages yet. Say hello!</p>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', padding: 32 }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, marginBottom: 16, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+              👋
+            </div>
+            <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--foreground)' }}>Say Hello</p>
+            <p style={{ fontSize: 14, marginTop: 8 }}>This is the beginning of your secure chat with {name}.</p>
           </div>
         ) : (
           messages.filter(msg => {
@@ -234,6 +269,36 @@ export default function MessageArea({
             el.style.height = Math.min(el.scrollHeight, 120) + 'px';
           }}
         />
+        {!editMessageId && (
+          <div style={{ position: 'relative' }}>
+            <select
+              value={expirySeconds}
+              onChange={(e) => setExpirySeconds(Number(e.target.value))}
+              title="Self-Destruct Timer"
+              style={{
+                background: expirySeconds > 0 ? 'var(--primary)' : 'rgba(255,255,255,0.08)',
+                border: 'none',
+                color: '#fff',
+                height: 44,
+                borderRadius: 22,
+                padding: '0 12px',
+                fontSize: 14,
+                cursor: 'pointer',
+                outline: 'none',
+                appearance: 'none',
+                WebkitAppearance: 'none',
+                textAlign: 'center',
+                fontWeight: 600,
+              }}
+            >
+              <option value={0}>⏳ Off</option>
+              <option value={10}>⏳ 10s</option>
+              <option value={60}>⏳ 1m</option>
+              <option value={3600}>⏳ 1h</option>
+            </select>
+            <span style={{ position: 'absolute', right: 10, top: 14, pointerEvents: 'none', fontSize: 10 }}>▼</span>
+          </div>
+        )}
         <button
           type="submit"
           disabled={!input.trim() || sending}
@@ -265,6 +330,25 @@ function MessageBubble({
   const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const [showActions, setShowActions] = useState(false);
   const emojis = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+
+  // Calculate if message is expiring soon for visual cue
+  const [timeLeft, setTimeLeft] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!msg.selfDestructAt || msg.deleted) return;
+    const interval = setInterval(() => {
+      const remaining = new Date(msg.selfDestructAt!).getTime() - Date.now();
+      if (remaining <= 0) {
+        setTimeLeft('Expired');
+        clearInterval(interval);
+      } else if (remaining < 60000) {
+        setTimeLeft(`${Math.ceil(remaining / 1000)}s`);
+      } else {
+        setTimeLeft(`${Math.ceil(remaining / 60000)}m`);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [msg.selfDestructAt, msg.deleted]);
 
   // Aggregate reactions
   const reactionCounts: Record<string, number> = {};
@@ -300,10 +384,22 @@ function MessageBubble({
               <span style={{ fontSize: 12, color: 'var(--muted)' }}>Decrypting…</span>
             </div>
           ) : (
-            <p style={{ fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{text}</p>
+            <p style={{ 
+              fontSize: 14, 
+              lineHeight: 1.5, 
+              wordBreak: 'break-word', 
+              whiteSpace: 'pre-wrap',
+              userSelect: msg.selfDestructAt ? 'none' : 'auto',
+              WebkitUserSelect: msg.selfDestructAt ? 'none' : 'auto'
+            }}>{text}</p>
           )}
           
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 4 }}>
+            {msg.selfDestructAt && !msg.deleted && (
+              <span style={{ fontSize: 10, color: 'var(--danger)', opacity: 0.9, display: 'flex', alignItems: 'center', gap: 2 }}>
+                ⏳ {timeLeft || '...'}
+              </span>
+            )}
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{time}</span>
             {isMine && (
               <span style={{ fontSize: 11, color: msg.status === 'read' ? '#6c63ff' : 'rgba(255,255,255,0.4)' }}>

@@ -9,7 +9,9 @@ import { connectDB } from '@/utils/db';
 import authRoutes from '@/routes/authRoutes';
 import chatRoutes from '@/routes/chatRoutes';
 import messageRoutes from '@/routes/messageRoutes';
+import privacyRoutes from '@/routes/privacyRoutes';
 import { registerSocketHandlers } from '@/socket/handlers';
+import { startCleanupJob } from '@/jobs/cleanup';
 
 dotenv.config();
 
@@ -41,6 +43,7 @@ app.use(express.json({ limit: '2mb' }));
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api', privacyRoutes);
 app.use('/api', chatRoutes);
 
 app.get('/', (_req, res) => {
@@ -54,6 +57,7 @@ registerSocketHandlers(io);
 const PORT = process.env.PORT || 5000;
 connectDB()
   .then(() => {
+    startCleanupJob();
     server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
   .catch((err) => {

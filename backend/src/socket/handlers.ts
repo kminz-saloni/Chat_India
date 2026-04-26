@@ -57,6 +57,9 @@ export function registerSocketHandlers(io: Server): void {
 
     addOnline(userId, socket.id);
 
+    // ─── Join personal room for user-specific events (e.g. panic) ──────────────
+    socket.join(`user:${userId}`);
+
     // ─── Join all user's chat rooms ────────────────────────────────────────────
     const userChats = await Chat.find({ members: new mongoose.Types.ObjectId(userId) }).select('_id');
     for (const chat of userChats) {
@@ -132,4 +135,11 @@ export function emitNewMessage(io: Server, chatId: string, message: unknown): vo
  */
 export function emitMessageUpdate(io: Server, chatId: string, update: unknown): void {
   io.to(`chat:${chatId}`).emit('message:updated', update);
+}
+
+/**
+ * Emit a panic event to all active clients of a specific user.
+ */
+export function emitPanicEvent(io: Server, userId: string): void {
+  io.to(`user:${userId}`).emit('panic:triggered', { timestamp: new Date().toISOString() });
 }
