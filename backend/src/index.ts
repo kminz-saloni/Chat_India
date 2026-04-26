@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -17,24 +19,38 @@ const io = new Server(server, {
   },
 });
 
-// Middleware
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true }));
-app.use(express.json());
+// ─── Security headers ─────────────────────────────────────────────────────────
+app.use(helmet());
 
-// Routes
+// ─── Global rate-limit ────────────────────────────────────────────────────────
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 min
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many requests, please slow down.' },
+  }),
+);
+
+// ─── Core middleware ───────────────────────────────────────────────────────────
+app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true }));
+app.use(express.json({ limit: '2mb' }));
+
+// ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 
 app.get('/', (_req, res) => {
   res.json({ status: 'ok', app: 'Chat-India API' });
 });
 
-// Socket.IO
+// ─── Socket.IO ────────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
   console.log('Socket connected:', socket.id);
   socket.on('disconnect', () => console.log('Socket disconnected:', socket.id));
 });
 
-// Start
+// ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 connectDB()
   .then(() => {

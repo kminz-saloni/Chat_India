@@ -85,13 +85,17 @@ export async function verifyOtp(req: Request, res: Response): Promise<void> {
 
 // ─── POST /auth/register ──────────────────────────────────────────────────────
 export async function register(req: Request, res: Response): Promise<void> {
-  const { phone, name, password } = req.body;
+  const { phone, name, password, publicKey, encryptedPrivateKey } = req.body;
   if (!phone || !name || !password) {
     res.status(400).json({ message: 'Phone, name, and password are required' });
     return;
   }
   if (password.length < 8) {
     res.status(400).json({ message: 'Password must be at least 8 characters' });
+    return;
+  }
+  if (!publicKey || !encryptedPrivateKey) {
+    res.status(400).json({ message: 'publicKey and encryptedPrivateKey are required' });
     return;
   }
 
@@ -102,7 +106,7 @@ export async function register(req: Request, res: Response): Promise<void> {
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await User.create({ phone, name, passwordHash });
+  const user = await User.create({ phone, name, passwordHash, publicKey, encryptedPrivateKey });
 
   const ip = req.ip || '';
   const ua = req.headers['user-agent'] || '';

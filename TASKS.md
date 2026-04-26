@@ -73,7 +73,7 @@ User can sign in with phone, verify OTP, access app, manage sessions.
 ## Phase 3: Crypto Module
 
 **Goal:** Ensure client-side privacy.
-**Refer:** ARCHITECTURE.md, SRS.md
+**Refer:** ARCHITECTURE.md, SRS.md, API.md, Security_Checklist.md
 
 ### Tasks
 
