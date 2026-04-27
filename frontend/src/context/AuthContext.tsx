@@ -149,7 +149,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ─── Logout ─────────────────────────────────────────────────────────────────
   async function logout() {
     try {
-      await apiRequest('/auth/logout', { method: 'POST', token: token ?? undefined });
+      await apiRequest('/auth/logout', {
+        method: 'POST',
+        token: token ?? undefined,
+        suppressHttpErrorLog: true,
+      });
     } catch {
       // best-effort
     }

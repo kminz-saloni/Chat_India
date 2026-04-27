@@ -67,11 +67,14 @@ export function useSocket() {
     socketInstance = io(SOCKET_URL, {
       path: '/socket.io/',
       auth: { token },
-      transports: ['websocket', 'polling'],
+      // Polling-first is more reliable behind proxies/tunnels and avoids websocket timeout loops.
+      transports: ['polling', 'websocket'],
+      upgrade: true,
+      rememberUpgrade: false,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 10000,
+      timeout: 20000,
     });
 
     socketInstance.on('connect', () => {

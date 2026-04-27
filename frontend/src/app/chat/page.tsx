@@ -117,12 +117,21 @@ export default function ChatPage() {
         setActiveContact(null);
         setMessages([]);
       }
-    } catch {
-      /* noop */
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      const isSessionError =
+        message.includes('Session expired') ||
+        message.includes('Unauthorized') ||
+        message.includes('Invalid or expired token');
+
+      if (isSessionError) {
+        await logout();
+        router.replace('/auth/login');
+      }
     } finally {
       setChatsLoading(false);
     }
-  }, [token, showVault, vaultUnlocked, activeChatId]);
+  }, [token, showVault, vaultUnlocked, activeChatId, logout, router]);
 
   useEffect(() => { loadChats(); }, [loadChats]);
 

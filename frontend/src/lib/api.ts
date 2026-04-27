@@ -14,10 +14,11 @@ type RequestOptions = {
   method?: string;
   body?: unknown;
   token?: string;
+  suppressHttpErrorLog?: boolean;
 };
 
 export async function apiRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, token } = options;
+  const { method = 'GET', body, token, suppressHttpErrorLog = false } = options;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -36,7 +37,7 @@ export async function apiRequest<T>(endpoint: string, options: RequestOptions = 
     
     if (!res.ok) {
       // Use warn for 4xx/5xx responses (these are often expected errors like invalid PIN)
-      if (res.status >= 400) {
+      if (res.status >= 400 && !suppressHttpErrorLog) {
         console.warn(`[API] ${res.status}:`, data?.message || data);
       }
       throw new Error(data.message || `Request failed with status ${res.status}`);
