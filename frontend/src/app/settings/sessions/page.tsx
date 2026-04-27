@@ -11,6 +11,7 @@ interface SessionItem {
   browser: string;
   lastActive: string;
   trusted: boolean;
+  current?: boolean;
 }
 
 export default function SessionsPage() {
@@ -150,6 +151,11 @@ export default function SessionsPage() {
                       {s.trusted && (
                         <span style={{ background: 'rgba(74,222,128,0.15)', color: 'var(--success)', fontSize: 10, padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>
                           TRUSTED
+                        </span>
+                      )}
+                      {s.current && (
+                        <span style={{ background: 'rgba(74,158,255,0.18)', color: '#7db8ff', fontSize: 10, padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>
+                          CURRENT DEVICE
                         </span>
                       )}
                     </div>

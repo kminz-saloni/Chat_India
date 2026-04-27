@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { apiRequest } from '@/lib/api';
@@ -31,6 +31,7 @@ export interface Message {
   chatId: string;
   senderId: string;
   ciphertext: string;
+  senderCiphertext?: string;
   status: 'sent' | 'delivered' | 'read';
   createdAt: string;
   deleted: boolean;
@@ -41,9 +42,9 @@ export interface Message {
 
 export default function ChatPage() {
   const router = useRouter();
-  const { user, token, loading } = useAuth();
+  const { user, token, loading, logout } = useAuth();
   const { ready: cryptoReady, decrypt } = useCrypto();
-  const { joinChat, sendTypingStart, sendTypingStop, sendReadReceipt, onEvent } = useSocket();
+  const { joinChat, sendTypingStart, sendTypingStop, sendReadReceipt, sendDeliveryReceipt, onEvent } = useSocket();
 
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -61,7 +62,24 @@ export default function ChatPage() {
   const [showVault, setShowVault] = useState(false);
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
   const [vaultPinPrompt, setVaultPinPrompt] = useState(false);
+  const [vaultMode, setVaultMode] = useState<'unlock' | 'setup'>('unlock');
   const [vaultPin, setVaultPin] = useState('');
+  const [vaultPinConfirm, setVaultPinConfirm] = useState('');
+  const panicInProgressRef = useRef(false);
+
+  const handlePanicLogout = useCallback(async () => {
+    if (panicInProgressRef.current) return;
+    panicInProgressRef.current = true;
+
+    setChats([]);
+    setMessages([]);
+    setDecryptedCache({});
+    setVaultUnlocked(false);
+    setShowVault(false);
+
+    await logout();
+    router.replace('/auth/login');
+  }, [logout, router]);
 
   // Mobile layout state
   const [isMobile, setIsMobile] = useState(false);
@@ -103,18 +121,28 @@ export default function ChatPage() {
   // ─── Socket events ─────────────────────────────────────────────────────────
   useEffect(() => {
     const offNewMsg = onEvent<Message>('message:new', (msg) => {
+      console.log('[Chat] Socket message:new received:', msg._id, msg.senderId === user?.id ? '(own)' : '(other)');
       if (msg.chatId === activeChatId) {
         setMessages((prev) => {
           if (prev.some((m) => m._id === msg._id)) return prev;
           return [...prev, msg];
         });
-        // Auto read-receipt
-        sendReadReceipt(msg.chatId, [msg._id]);
+        // Send delivery receipt
+        if (msg.senderId !== user?.id) {
+          console.log('[Chat] Sending delivery receipt for:', msg._id);
+          sendDeliveryReceipt(msg.chatId, [msg._id]);
+        }
+        // Auto read-receipt after brief delay (user has seen it)
+        setTimeout(() => sendReadReceipt(msg.chatId, [msg._id]), 100);
         // Decrypt immediately
         if (cryptoReady) {
-          decrypt(msg.ciphertext)
-            .then((pt) => setDecryptedCache((c) => ({ ...c, [msg._id]: pt })))
-            .catch(() => setDecryptedCache((c) => ({ ...c, [msg._id]: '[Encrypted]' })));
+          // Use senderCiphertext for own messages, regular ciphertext for others
+          const ciphertextToDecode = msg.senderId === user?.id ? msg.senderCiphertext : msg.ciphertext;
+          if (ciphertextToDecode) {
+            decrypt(ciphertextToDecode)
+              .then((pt) => setDecryptedCache((c) => ({ ...c, [msg._id]: pt })))
+              .catch(() => setDecryptedCache((c) => ({ ...c, [msg._id]: '[Encrypted]' })));
+          }
         }
       }
       // Bump the chat to top in sidebar
@@ -130,10 +158,12 @@ export default function ChatPage() {
     });
 
     const offOnline = onEvent<{ userId: string }>('presence:online', ({ userId }) => {
+      console.log('[Chat] Socket presence:online received:', userId);
       setOnlineUsers((o) => ({ ...o, [userId]: true }));
     });
 
     const offOffline = onEvent<{ userId: string }>('presence:offline', ({ userId }) => {
+      console.log('[Chat] Socket presence:offline received:', userId);
       setOnlineUsers((o) => ({ ...o, [userId]: false }));
     });
 
@@ -141,6 +171,19 @@ export default function ChatPage() {
       if (chatId === activeChatId) {
         setMessages((prev) =>
           prev.map((m) => (messageIds.includes(m._id) ? { ...m, status: 'read' } : m)),
+        );
+      }
+    });
+
+    const offDelivered = onEvent<{ chatId: string; messageIds: string[] }>('receipt:delivered', ({ chatId, messageIds }) => {
+      console.log('[Chat] Socket receipt:delivered received:', messageIds);
+      if (chatId === activeChatId) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (!messageIds.includes(m._id)) return m;
+            // Only transition from 'sent' to 'delivered', don't downgrade from 'read'
+            return m.status === 'sent' ? { ...m, status: 'delivered' } : m;
+          }),
         );
       }
     });
@@ -169,25 +212,15 @@ export default function ChatPage() {
       );
     });
 
-    const { logout } = require('@/context/AuthContext');
     const offPanic = onEvent('panic:triggered', () => {
-      setChats([]);
-      setMessages([]);
-      setDecryptedCache({});
-      setVaultUnlocked(false);
-      setShowVault(false);
-      
-      // We must invoke logout from context (could get it from useAuth but we don't want it in dependency array)
-      window.location.href = '/auth/login'; // Force redirect and wipe
-      localStorage.removeItem('ci_token');
-      localStorage.removeItem('ci_user');
+      void handlePanicLogout();
     });
 
     return () => {
       offNewMsg(); offTypingStart(); offTypingStop();
-      offOnline(); offOffline(); offReceipt(); offMsgUpdate(); offPanic();
+      offOnline(); offOffline(); offReceipt(); offDelivered(); offMsgUpdate(); offPanic();
     };
-  }, [activeChatId, cryptoReady, onEvent, sendReadReceipt, decrypt, loadChats]);
+  }, [activeChatId, cryptoReady, onEvent, sendReadReceipt, sendDeliveryReceipt, decrypt, loadChats, handlePanicLogout]);
 
   // ─── Open a chat ───────────────────────────────────────────────────────────
   async function openChat(chat: ChatItem) {
@@ -217,7 +250,9 @@ export default function ChatPage() {
         const pairs = await Promise.all(
           data.messages.map(async (m) => {
             try {
-              const pt = await decrypt(m.ciphertext);
+              // Use senderCiphertext for own messages, regular ciphertext for others
+              const ciphertextToDecode = m.senderId === user?.id ? m.senderCiphertext : m.ciphertext;
+              const pt = await decrypt(ciphertextToDecode || m.ciphertext);
               return [m._id, pt] as const;
             } catch {
               return [m._id, '[Encrypted]'] as const;
@@ -248,8 +283,14 @@ export default function ChatPage() {
       if (cryptoReady) {
         const pairs = await Promise.all(
           data.messages.map(async (m) => {
-            try { return [m._id, await decrypt(m.ciphertext)] as const; }
-            catch { return [m._id, '[Encrypted]'] as const; }
+            try {
+              // Use senderCiphertext for own messages, regular ciphertext for others
+              const ciphertextToDecode = m.senderId === user?.id ? m.senderCiphertext : m.ciphertext;
+              const pt = await decrypt(ciphertextToDecode || m.ciphertext);
+              return [m._id, pt] as const;
+            } catch {
+              return [m._id, '[Encrypted]'] as const;
+            }
           }),
         );
         setDecryptedCache((prev) => ({ ...prev, ...Object.fromEntries(pairs) }));
@@ -258,9 +299,14 @@ export default function ChatPage() {
   }
 
   async function handleSendMessage(plaintext: string, expirySeconds?: number) {
-    if (!activeChatId || !activeContact?.publicKey || !token) return;
+    if (!activeChatId || !activeContact?.publicKey || !user?.publicKey || !token) return;
     const { encryptAndPackMessage } = await import('@/lib/crypto');
+    
+    // Encrypt for recipient (only recipient can decrypt regular ciphertext)
     const ciphertext = await encryptAndPackMessage(plaintext, activeContact.publicKey);
+    
+    // Encrypt for sender (sender stores a copy encrypted with their own key for after-refresh decryption)
+    const senderCiphertext = await encryptAndPackMessage(plaintext, user.publicKey);
     
     let selfDestructAt: string | undefined;
     if (expirySeconds) {
@@ -286,7 +332,7 @@ export default function ChatPage() {
       const data = await apiRequest<{ message: Message }>('/messages', {
         method: 'POST',
         token,
-        body: { chatId: activeChatId, ciphertext, selfDestructAt },
+        body: { chatId: activeChatId, ciphertext, senderCiphertext, selfDestructAt },
       });
       // Replace optimistic with real or remove optimistic if socket already added it
       setMessages((prev) => {
@@ -368,6 +414,34 @@ export default function ChatPage() {
   async function handleVaultUnlock(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
+
+    if (vaultMode === 'setup') {
+      if (!vaultPin.trim()) {
+        toast.error('Please enter a new PIN');
+        return;
+      }
+      if (!vaultPinConfirm.trim()) {
+        toast.error('Please confirm your new PIN');
+        return;
+      }
+      if (vaultPin !== vaultPinConfirm) {
+        toast.error('PINs do not match. Try again.');
+        return;
+      }
+
+      try {
+        await apiRequest('/vault/setup', { method: 'POST', token, body: { pin: vaultPin } });
+        setVaultUnlocked(true);
+        setVaultPinPrompt(false);
+        setVaultMode('unlock');
+        setVaultPin('');
+        setVaultPinConfirm('');
+        toast.success('Vault PIN configured successfully!');
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to set Vault PIN');
+      }
+      return;
+    }
     
     if (!vaultPin.trim()) {
       toast.error('Please enter a PIN or password');
@@ -388,16 +462,10 @@ export default function ChatPage() {
       
       // If vault PIN not set, skip password try and go straight to setup
       if (errorMessage.includes('Vault PIN not set')) {
-        try {
-          await apiRequest('/vault/setup', { method: 'POST', token, body: { pin: userInput } });
-          setVaultUnlocked(true);
-          setVaultPinPrompt(false);
-          setVaultPin('');
-          toast.success('✅ Vault PIN configured! You can now hide chats.');
-        } catch {
-          toast.error('⚠️ Failed to setup vault PIN');
-          setVaultPin(''); // Clear on error for retry
-        }
+        setVaultMode('setup');
+        setVaultPin('');
+        setVaultPinConfirm('');
+        toast('Set a new Vault PIN to continue.');
         return;
       }
       
@@ -407,7 +475,9 @@ export default function ChatPage() {
           await apiRequest('/vault/unlock', { method: 'POST', token, body: { password: userInput } });
           setVaultUnlocked(true);
           setVaultPinPrompt(false);
+          setVaultMode('unlock');
           setVaultPin('');
+          setVaultPinConfirm('');
           toast.success('Vault unlocked!');
         } catch {
           // Both PIN and password failed
@@ -420,6 +490,7 @@ export default function ChatPage() {
       // Generic error
       toast.error('Error unlocking vault');
       setVaultPin('');
+      setVaultPinConfirm('');
     }
   }
 
@@ -427,6 +498,7 @@ export default function ChatPage() {
     if (!token) return;
     try {
       await apiRequest('/panic/trigger', { method: 'POST', token, body: { secretCode: '#LOCK' } });
+      await handlePanicLogout();
     } catch { /* noop */ }
   }
 
@@ -450,11 +522,15 @@ export default function ChatPage() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
           <div style={{ background: 'linear-gradient(135deg, var(--surface), var(--surface-2))', padding: 32, borderRadius: 16, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(108,99,255,0.2)', border: '1px solid rgba(108,99,255,0.3)' }}>
             <h2 style={{ marginBottom: 8, fontSize: 22, fontWeight: 700, textAlign: 'center' }}>🔐 Unlock Vault</h2>
-            <p style={{ marginBottom: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>Enter your PIN or password to access hidden chats</p>
+            <p style={{ marginBottom: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>
+              {vaultMode === 'setup'
+                ? 'Create a new Vault PIN to protect hidden chats'
+                : 'Enter your PIN or password to access hidden chats'}
+            </p>
             <form onSubmit={handleVaultUnlock}>
               <input 
                 type="password" 
-                placeholder="Enter PIN or Password" 
+                placeholder={vaultMode === 'setup' ? 'Create new PIN' : 'Enter PIN or Password'} 
                 value={vaultPin}
                 onChange={e => setVaultPin(e.target.value)}
                 style={{ 
@@ -481,10 +557,36 @@ export default function ChatPage() {
                 }}
                 autoFocus
               />
+              {vaultMode === 'setup' && (
+                <input
+                  type="password"
+                  placeholder="Confirm new PIN"
+                  value={vaultPinConfirm}
+                  onChange={e => setVaultPinConfirm(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '2px solid rgba(108,99,255,0.3)',
+                    borderRadius: 10,
+                    color: '#fff',
+                    outline: 'none',
+                    marginBottom: 20,
+                    fontSize: 15,
+                    transition: 'all 0.2s',
+                  }}
+                />
+              )}
               <div style={{ display: 'flex', gap: 12 }}>
                 <button 
                   type="button" 
-                  onClick={() => { setVaultPinPrompt(false); setShowVault(false); }} 
+                  onClick={() => {
+                    setVaultPinPrompt(false);
+                    setShowVault(false);
+                    setVaultMode('unlock');
+                    setVaultPin('');
+                    setVaultPinConfirm('');
+                  }} 
                   style={{ 
                     flex: 1, 
                     padding: '14px 16px', 
@@ -534,19 +636,30 @@ export default function ChatPage() {
                     e.currentTarget.style.transform = 'translateY(0)';
                   }}
                 >
-                  🔓 Unlock
+                  {vaultMode === 'setup' ? '✅ Set PIN' : '🔓 Unlock'}
                 </button>
               </div>
             </form>
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
               <button
                 onClick={async () => {
+                  if (vaultMode === 'setup') {
+                    toast.error('Cancel PIN setup to reset Vault PIN.');
+                    return;
+                  }
                   if (confirm('⚠️ This will clear your vault PIN. Are you sure?\n\nAll hidden chats will still exist but no longer be protected.')) {
+                    const password = prompt('Enter your account password to reset Vault PIN:');
+                    if (!password) {
+                      toast.error('Password is required to reset Vault PIN.');
+                      return;
+                    }
                     try {
-                      await apiRequest('/vault/reset', { method: 'POST', token });
+                      await apiRequest('/vault/reset', { method: 'POST', token: token ?? undefined, body: { password } });
                       setVaultPinPrompt(false);
                       setShowVault(false);
+                      setVaultMode('unlock');
                       setVaultPin('');
+                      setVaultPinConfirm('');
                       toast.success('✅ Vault PIN cleared. Set a new one when ready.');
                     } catch {
                       toast.error('Failed to reset vault');
@@ -594,13 +707,25 @@ export default function ChatPage() {
             token={token ?? ''}
           onChatCreated={loadChats}
           showVault={showVault}
-          onToggleVault={() => {
+          onToggleVault={async () => {
             if (showVault) {
               setShowVault(false);
               setVaultUnlocked(false);
+              setVaultMode('unlock');
+              setVaultPin('');
+              setVaultPinConfirm('');
             } else {
-              setShowVault(true);
-              setVaultPinPrompt(true);
+              // Check if vault PIN is already set before opening modal
+              try {
+                const info = await apiRequest<{ pinSet: boolean }>('/vault/info', { token: token ?? undefined });
+                setShowVault(true);
+                setVaultMode(info.pinSet ? 'unlock' : 'setup');
+                setVaultPin('');
+                setVaultPinConfirm('');
+                setVaultPinPrompt(true);
+              } catch {
+                toast.error('Failed to check vault status');
+              }
             }
           }}
           onMoveToVault={handleMoveToVault}

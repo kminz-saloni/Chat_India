@@ -7,12 +7,14 @@ import {
   triggerPanic,
   getVaultChats,
   resetVault,
+  getVaultInfo,
 } from '@/controllers/privacyController';
 
 const router = Router();
 
 router.use(authMiddleware);
 
+router.get('/vault/info', getVaultInfo);
 router.post('/vault/setup', setupVault);
 router.post('/vault/unlock', unlockVault);
 router.post('/vault/reset', resetVault);

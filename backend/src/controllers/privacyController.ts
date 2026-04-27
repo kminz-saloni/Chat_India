@@ -7,7 +7,16 @@ import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { io } from '@/index';
 import { emitPanicEvent } from '@/socket/handlers';
+// ─── GET /vault/info ─────────────────────────────────────────────────────
+export async function getVaultInfo(req: AuthRequest, res: Response): Promise<void> {
+  const user = await User.findById(req.userId);
+  if (!user) {
+    res.status(404).json({ message: 'User not found' });
+    return;
+  }
 
+  res.json({ pinSet: !!user.vaultPinHash });
+}
 // ─── GET /vault/chats ────────────────────────────────────────────────────────
 export async function getVaultChats(req: AuthRequest, res: Response): Promise<void> {
   const me = new mongoose.Types.ObjectId(req.userId);
@@ -48,6 +57,11 @@ export async function setupVault(req: AuthRequest, res: Response): Promise<void>
   const user = await User.findById(req.userId);
   if (!user) {
     res.status(404).json({ message: 'User not found' });
+    return;
+  }
+
+  if (user.vaultPinHash) {
+    res.status(409).json({ message: 'Vault PIN already set. Reset it first to configure a new PIN.' });
     return;
   }
 
@@ -159,9 +173,21 @@ export async function triggerPanic(req: AuthRequest, res: Response): Promise<voi
 
 // ─── POST /vault/reset ────────────────────────────────────────────────────────
 export async function resetVault(req: AuthRequest, res: Response): Promise<void> {
+  const { password } = req.body;
+  if (!password) {
+    res.status(400).json({ message: 'Password is required to reset vault PIN' });
+    return;
+  }
+
   const user = await User.findById(req.userId);
   if (!user) {
     res.status(404).json({ message: 'User not found' });
+    return;
+  }
+
+  const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+  if (!passwordMatch) {
+    res.status(401).json({ message: 'Invalid password' });
     return;
   }
 

@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000';
 
+console.log('[API Proxy] Backend URL configured:', BACKEND_URL);
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
@@ -61,9 +63,10 @@ export async function GET(
 ) {
   const { path } = await params;
   const endpoint = '/api/' + (path || []).join('/');
+  const searchParams = request.nextUrl.search;
 
   try {
-    console.log(`[API Proxy] GET ${endpoint}`);
+    console.log(`[API Proxy] GET ${endpoint}${searchParams}`);
 
     const headers: Record<string, string> = {};
 
@@ -73,7 +76,7 @@ export async function GET(
       headers['authorization'] = authHeader;
     }
 
-    const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+    const response = await fetch(`${BACKEND_URL}${endpoint}${searchParams}`, {
       method: 'GET',
       headers,
     });
@@ -130,6 +133,51 @@ export async function DELETE(
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     console.error('[API Proxy] DELETE Error:', error);
+    return NextResponse.json(
+      { error: String(error) },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await params;
+  const endpoint = '/api/' + (path || []).join('/');
+
+  try {
+    const body = await request.text();
+    console.log(`[API Proxy] PATCH ${endpoint}`, body.slice(0, 100));
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // Forward authorization header if present
+    const authHeader = request.headers.get('authorization');
+    if (authHeader) {
+      headers['authorization'] = authHeader;
+    }
+
+    const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+      method: 'PATCH',
+      headers,
+      body: body || undefined,
+    });
+
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      data = {};
+    }
+
+    return NextResponse.json(data, { status: response.status });
+  } catch (error) {
+    console.error('[API Proxy] PATCH Error:', error);
     return NextResponse.json(
       { error: String(error) },
       { status: 500 }

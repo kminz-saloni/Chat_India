@@ -402,7 +402,7 @@ function MessageBubble({
             )}
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{time}</span>
             {isMine && (
-              <span style={{ fontSize: 11, color: msg.status === 'read' ? '#6c63ff' : 'rgba(255,255,255,0.4)' }}>
+              <span style={{ fontSize: 11, color: msg.status === 'read' ? '#6c63ff' : 'rgba(255,255,255,0.4)', display: 'flex', gap: 1 }}>
                 {isOpt ? '○' : msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
               </span>
             )}

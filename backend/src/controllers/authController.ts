@@ -5,6 +5,8 @@ import { OtpRequest } from '@/models/OtpRequest';
 import { Session } from '@/models/Session';
 import { generateOtp, hashOtp, hashIp, parseUserAgent } from '@/utils/authHelpers';
 import { generateToken, AuthRequest } from '@/middleware/auth';
+import { io } from '@/index';
+import { disconnectSessionSockets } from '@/socket/handlers';
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_OTP_ATTEMPTS = 5;
@@ -256,27 +258,57 @@ export async function logout(req: AuthRequest, res: Response): Promise<void> {
 // ─── GET /auth/sessions ───────────────────────────────────────────────────────
 export async function getSessions(req: AuthRequest, res: Response): Promise<void> {
   const sessions = await Session.find({ userId: req.userId, active: true }).sort({ lastActive: -1 });
-  res.json({ sessions });
+  const mappedSessions = sessions.map((session) => ({
+    ...session.toObject(),
+    current: String(session._id) === req.sessionId,
+  }));
+  res.json({ sessions: mappedSessions });
 }
 
 // ─── DELETE /auth/sessions/:sessionId ────────────────────────────────────────
 export async function revokeSession(req: AuthRequest, res: Response): Promise<void> {
-  const { sessionId } = req.params;
+  const rawSessionId = req.params.sessionId;
+  const sessionId = Array.isArray(rawSessionId) ? rawSessionId[0] : rawSessionId;
+  if (!sessionId) {
+    res.status(400).json({ message: 'sessionId is required' });
+    return;
+  }
+
   const session = await Session.findOne({ _id: sessionId, userId: req.userId });
   if (!session) {
     res.status(404).json({ message: 'Session not found' });
     return;
   }
+
+  if (!session.active) {
+    res.json({ message: 'Session already revoked' });
+    return;
+  }
+
   await Session.findByIdAndUpdate(sessionId, { active: false });
+  disconnectSessionSockets(io, sessionId);
   res.json({ message: 'Session revoked' });
 }
 
 // ─── DELETE /auth/sessions ────────────────────────────────────────────────────
 export async function revokeAllOtherSessions(req: AuthRequest, res: Response): Promise<void> {
-  await Session.updateMany(
-    { userId: req.userId, active: true, _id: { $ne: req.sessionId } },
-    { active: false },
-  );
+  const sessionsToRevoke = await Session.find({
+    userId: req.userId,
+    active: true,
+    _id: { $ne: req.sessionId },
+  }).select('_id');
+
+  if (sessionsToRevoke.length > 0) {
+    await Session.updateMany(
+      { _id: { $in: sessionsToRevoke.map((s) => s._id) } },
+      { active: false },
+    );
+
+    sessionsToRevoke.forEach((session) => {
+      disconnectSessionSockets(io, String(session._id));
+    });
+  }
+
   res.json({ message: 'All other sessions revoked' });
 }
 

@@ -29,7 +29,7 @@ export async function searchUsers(req: AuthRequest, res: Response): Promise<void
 
 // ─── POST /chats ──────────────────────────────────────────────────────────────
 export async function createOrGetChat(req: AuthRequest, res: Response): Promise<void> {
-  const { memberId } = req.body;
+  const { memberId, customName } = req.body;
   if (!memberId) {
     res.status(400).json({ message: 'memberId is required' });
     return;
@@ -54,6 +54,15 @@ export async function createOrGetChat(req: AuthRequest, res: Response): Promise<
     chat = await Chat.create({ type: 'direct', members: [me, other] });
   }
 
+  // Store custom contact name if provided
+  if (customName) {
+    const currentUser = await User.findById(req.userId);
+    if (currentUser) {
+      currentUser.customContactNames[String(other)] = customName;
+      await currentUser.save();
+    }
+  }
+
   res.status(201).json({ chat });
 }
 
@@ -65,6 +74,10 @@ export async function getMyChats(req: AuthRequest, res: Response): Promise<void>
     .populate('lastMessage')
     .sort({ updatedAt: -1 });
 
+  // Get current user's custom contact names
+  const currentUser = await User.findById(req.userId).select('customContactNames');
+  const customNames = currentUser?.customContactNames || {};
+
   // Hydrate each chat with the other member's profile
   const hydratedChats = await Promise.all(
     chats.map(async (chat) => {
@@ -72,13 +85,15 @@ export async function getMyChats(req: AuthRequest, res: Response): Promise<void>
       const other = otherId
         ? await User.findById(otherId).select('_id name phone publicKey')
         : null;
+      // Use custom name if available, otherwise use global name
+      const displayName = (other && customNames[String(otherId)]) || other?.name || 'Unknown';
       return {
         _id: chat._id,
         type: chat.type,
         updatedAt: chat.updatedAt,
         lastMessage: chat.lastMessage,
         inVault: chat.vaultEnabledFor.some((id) => id.toString() === req.userId),
-        contact: other,
+        contact: other ? { ...other.toObject(), name: displayName } : null,
       };
     }),
   );
@@ -91,7 +106,7 @@ export async function getMyChats(req: AuthRequest, res: Response): Promise<void>
 
 // ─── POST /messages ───────────────────────────────────────────────────────────
 export async function sendMessage(req: AuthRequest, res: Response): Promise<void> {
-  const { chatId, ciphertext, selfDestructAt } = req.body;
+  const { chatId, ciphertext, senderCiphertext, selfDestructAt } = req.body;
   if (!chatId || !ciphertext) {
     res.status(400).json({ message: 'chatId and ciphertext are required' });
     return;
@@ -110,6 +125,7 @@ export async function sendMessage(req: AuthRequest, res: Response): Promise<void
     chatId,
     senderId: me,
     ciphertext,
+    senderCiphertext: senderCiphertext ?? undefined,
     selfDestructAt: selfDestructAt ?? undefined,
     status: 'sent',
   });

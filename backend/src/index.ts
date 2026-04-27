@@ -18,27 +18,15 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 export const io = new Server(server, {
+  path: '/socket.io/',
   cors: {
-    origin: (origin, callback) => {
-      // Allow all origins in development for Socket.IO
-      // In production, restrict to specific domains
-      if (process.env.NODE_ENV === 'production') {
-        const allowedOrigins = [
-          process.env.FRONTEND_URL || 'http://localhost:3000'
-        ];
-        if (allowedOrigins.includes(origin)) {
-          callback(null, true);
-        } else {
-          callback(new Error('CORS not allowed'));
-        }
-      } else {
-        callback(null, true);
-      }
-    },
-    methods: ['GET', 'POST'],
-    credentials: true,
+    origin: '*',  // Allow all origins in development
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: false,  // Disable for simple CORS with wildcard origin
   },
-  transports: ['websocket', 'polling'],  // Ensure both transports available
+  transports: ['websocket', 'polling'],
+  pingInterval: 25000,
+  pingTimeout: 60000,
 });
 
 // ─── Security ─────────────────────────────────────────────────────────────────

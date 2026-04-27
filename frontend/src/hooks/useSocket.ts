@@ -15,48 +15,58 @@ export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      console.log('[Socket] No token, skipping connection');
+      return;
+    }
 
     // Reuse existing connection if token hasn't changed
     if (socketInstance && socketInstance.connected) {
+      console.log('[Socket] Reusing existing connection');
       socketRef.current = socketInstance;
       return;
     }
 
-    const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
+    // Route Socket.IO directly to backend (no proxy needed, CORS configured)
+    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    const SOCKET_URL = `${protocol}//${hostname}:5000`;
 
+    console.log('[Socket] Connecting to:', SOCKET_URL, { hasToken: !!token });
     socketInstance = io(SOCKET_URL, {
+      path: '/socket.io/',
       auth: { token },
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 3,  // Reduce from 10 to fail fast
-      reconnectionDelay: 2000,  // Increase delay to avoid spam
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      connectTimeout: 5000,     // Add explicit timeout
+      timeout: 10000,
     });
 
     socketInstance.on('connect', () => {
-      console.log('[Socket] Connected:', socketInstance?.id);
+      console.log('[Socket] ✓ Connected via', socketInstance?.io?.engine?.transport?.name, ':', socketInstance?.id);
+    });
+
+    socketInstance.on('disconnect', (reason) => {
+      console.warn('[Socket] ✗ Disconnected:', reason);
+    });
+
+    // Track polling attempts
+    socketInstance.io?.engine?.on('upgrade', (transport) => {
+      console.log('[Socket] Transport upgraded to:', transport.name);
+    });
+
+    socketInstance.io?.on('error', (error) => {
+      console.error('[Socket] Engine error:', error);
     });
 
     socketInstance.on('connect_error', (err: any) => {
-      const errorMsg = err.message || String(err);
-      // Only log session expiry as a warning (actionable)
-      // Suppress other connection errors since they're non-critical
-      if (errorMsg === 'Session expired') {
-        console.warn('[Socket] Session expired — reconnecting');
-        return;
-      }
-      // Silently fail for other errors (network unreachable, CORS, etc.)
-      // Socket.IO will retry automatically, and polling transport will handle it
-    });
-
-    // Event listeners for real-time updates (optional)
-    socketInstance?.on('message:new', (data) => {
-      console.log('[Socket] New message:', data);
-    });
-
-    socketInstance?.on('user:typing', (data) => {
-      console.log('[Socket] User typing:', data);
+      const errorMsg = err?.message || err?.data?.message || String(err);
+      console.error('[Socket] ✗ Connection error:', {
+        message: errorMsg,
+        type: err?.type,
+        code: err?.code,
+      });
     });
 
     socketRef.current = socketInstance;
@@ -91,6 +101,10 @@ export function useSocket() {
     socketRef.current?.emit('receipt:read', { chatId, messageIds });
   }, []);
 
+  const sendDeliveryReceipt = useCallback((chatId: string, messageIds: string[]) => {
+    socketRef.current?.emit('receipt:delivered', { chatId, messageIds });
+  }, []);
+
   const onEvent = useCallback(<T>(event: string, handler: (data: T) => void) => {
     socketRef.current?.on(event, handler);
     return () => { socketRef.current?.off(event, handler); };
@@ -102,6 +116,7 @@ export function useSocket() {
     sendTypingStart,
     sendTypingStop,
     sendReadReceipt,
+    sendDeliveryReceipt,
     onEvent,
   };
 }

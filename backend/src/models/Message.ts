@@ -3,7 +3,8 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IMessage extends Document {
   chatId: mongoose.Types.ObjectId;
   senderId: mongoose.Types.ObjectId;
-  ciphertext: string;
+  ciphertext: string; // Encrypted with recipient's public key (for recipient)
+  senderCiphertext?: string; // Encrypted with sender's own public key (for sender's copy)
   edited: boolean;
   deleted: boolean;
   reactions: { userId: mongoose.Types.ObjectId; emoji: string }[];
@@ -18,6 +19,7 @@ const MessageSchema = new Schema<IMessage>(
     chatId: { type: Schema.Types.ObjectId, ref: 'Chat', required: true, index: true },
     senderId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     ciphertext: { type: String, required: function(this: any) { return !this.deleted; } },
+    senderCiphertext: { type: String }, // Sender's own encrypted copy for their view
     edited: { type: Boolean, default: false },
     deleted: { type: Boolean, default: false },
     reactions: [

@@ -8,6 +8,7 @@ export interface IUser extends Document {
   encryptedPrivateKey?: string;
   vaultPinHash?: string;
   panicLocked: boolean;
+  customContactNames: Record<string, string>;
   createdAt: Date;
   deletedAt?: Date;
 }
@@ -21,6 +22,7 @@ const UserSchema = new Schema<IUser>(
     encryptedPrivateKey: { type: String },
     vaultPinHash: { type: String },
     panicLocked: { type: Boolean, default: false },
+    customContactNames: { type: Map, of: String, default: {} },
     deletedAt: { type: Date },
   },
   { timestamps: true },

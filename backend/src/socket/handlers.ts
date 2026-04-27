@@ -31,7 +31,13 @@ export function registerSocketHandlers(io: Server): void {
   // ─── Auth middleware ────────────────────────────────────────────────────────
   io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token as string | undefined;
-    console.log('[Socket] Incoming connection:', { socketId: socket.id, hasToken: !!token });
+    const transport = socket.handshake.headers['user-agent'];
+    console.log('[Socket] 📥 Incoming connection attempt:', { 
+      socketId: socket.id, 
+      hasToken: !!token,
+      transport: socket.conn?.transport?.name,
+      from: socket.handshake.address
+    });
     
     if (!token) {
       console.warn('[Socket] Rejected: No token provided');
@@ -63,12 +69,14 @@ export function registerSocketHandlers(io: Server): void {
 
   io.on('connection', async (socket: Socket) => {
     const userId: string = socket.data.userId;
+    const sessionId: string = socket.data.sessionId;
     console.log(`[Socket] User ${userId} connected (${socket.id})`);
 
     addOnline(userId, socket.id);
 
     // ─── Join personal room for user-specific events (e.g. panic) ──────────────
     socket.join(`user:${userId}`);
+    socket.join(`session:${sessionId}`);
 
     // ─── Join all user's chat rooms ────────────────────────────────────────────
     const userChats = await Chat.find({ members: new mongoose.Types.ObjectId(userId) }).select('_id');
@@ -119,6 +127,19 @@ export function registerSocketHandlers(io: Server): void {
       socket.to(`chat:${chatId}`).emit('receipt:read', { chatId, messageIds, readBy: userId });
     });
 
+    // ─── receipt:delivered ────────────────────────────────────────────────────
+    socket.on('receipt:delivered', async (data: { chatId: string; messageIds: string[] }) => {
+      const { chatId, messageIds } = data;
+
+      await Message.updateMany(
+        { _id: { $in: messageIds }, chatId, senderId: { $ne: userId }, status: 'sent' },
+        { status: 'delivered' },
+      );
+
+      // Notify the chat room (sender will see delivered checkmark)
+      socket.to(`chat:${chatId}`).emit('receipt:delivered', { chatId, messageIds, deliveredTo: userId });
+    });
+
     // ─── disconnect ───────────────────────────────────────────────────────────
     socket.on('disconnect', () => {
       console.log(`[Socket] User ${userId} disconnected (${socket.id})`);
@@ -152,4 +173,13 @@ export function emitMessageUpdate(io: Server, chatId: string, update: unknown): 
  */
 export function emitPanicEvent(io: Server, userId: string): void {
   io.to(`user:${userId}`).emit('panic:triggered', { timestamp: new Date().toISOString() });
+}
+
+/**
+ * Disconnect all sockets tied to a specific session.
+ * Useful for session revoke/logout across devices.
+ */
+export function disconnectSessionSockets(io: Server, sessionId: string): void {
+  io.to(`session:${sessionId}`).emit('session:revoked', { sessionId, timestamp: new Date().toISOString() });
+  io.in(`session:${sessionId}`).disconnectSockets(true);
 }

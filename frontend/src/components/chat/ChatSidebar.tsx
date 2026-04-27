@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { apiRequest } from '@/lib/api';
+import { toast } from 'react-hot-toast';
 import type { ChatItem, Contact } from '@/app/chat/page';
 
 interface Props {
@@ -22,34 +23,53 @@ export default function ChatSidebar({
   chats, activeChatId, onSelectChat, loading, onlineUsers, token, onChatCreated,
   showVault, onToggleVault, onMoveToVault, onPanic,
 }: Props) {
-  const [search, setSearch] = useState('');
-  const [searchResults, setSearchResults] = useState<Contact[]>([]);
-  const [searching, setSearching] = useState(false);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [newChatPhone, setNewChatPhone] = useState('');
+  const [newChatName, setNewChatName] = useState('');
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [creatingChat, setCreatingChat] = useState(false);
 
-  async function handleSearch(q: string) {
-    setSearch(q);
-    if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    if (!q.trim()) { setSearchResults([]); return; }
-    searchTimeout.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await apiRequest<{ users: Contact[] }>(
-          `/users/search?phone=${encodeURIComponent(q)}`,
-          { token },
-        );
-        setSearchResults(res.users);
-      } catch { /* noop */ } finally { setSearching(false); }
-    }, 350);
-  }
+  async function handleCreateNewChat(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newChatPhone.trim()) {
+      toast.error('Please enter a phone number');
+      return;
+    }
 
-  async function startChat(contact: Contact) {
+    setCreatingChat(true);
     try {
-      await apiRequest('/chats', { method: 'POST', token, body: { memberId: contact._id } });
-      setSearch('');
-      setSearchResults([]);
+      // Search for user by phone
+      const searchRes = await apiRequest<{ users: Contact[] }>(
+        `/users/search?phone=${encodeURIComponent(newChatPhone)}`,
+        { token },
+      );
+
+      if (!searchRes.users || searchRes.users.length === 0) {
+        toast.error('No user found with that phone number');
+        return;
+      }
+
+      const foundUser = searchRes.users[0];
+
+      // Create chat with optional custom name
+      await apiRequest('/chats', {
+        method: 'POST',
+        token,
+        body: {
+          memberId: foundUser._id,
+          customName: newChatName.trim() || undefined,
+        },
+      });
+
+      setNewChatPhone('');
+      setNewChatName('');
+      setShowNewChatModal(false);
+      toast.success('Chat created successfully!');
       onChatCreated();
-    } catch { /* noop */ }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to create chat');
+    } finally {
+      setCreatingChat(false);
+    }
   }
 
   return (
@@ -167,42 +187,166 @@ export default function ChatSidebar({
             ⚙️ SETTINGS
           </a>
         </div>
-        {/* Search */}
-        <input
-          type="text"
-          className="input-field"
-          placeholder="Search by phone to start chat…"
-          value={search}
-          onChange={(e) => handleSearch(e.target.value)}
-          style={{ fontSize: 13, padding: '10px 14px' }}
-        />
+        {/* New Chat Button */}
+        <button
+          onClick={() => setShowNewChatModal(true)}
+          disabled={showVault}
+          style={{
+            width: '100%',
+            background: showVault ? 'rgba(108,99,255,0.3)' : 'linear-gradient(135deg, #6c63ff, #5a4ecf)',
+            border: 'none',
+            borderRadius: 8,
+            padding: '12px 16px',
+            color: 'white',
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: showVault ? 'not-allowed' : 'pointer',
+            transition: 'all 0.25s',
+            boxShadow: showVault ? 'none' : '0 4px 12px rgba(108, 99, 255, 0.3)',
+          }}
+          onMouseEnter={(e) => {
+            if (!showVault) {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 16px rgba(108, 99, 255, 0.5)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = showVault ? 'none' : '0 4px 12px rgba(108, 99, 255, 0.3)';
+          }}
+          title={showVault ? 'Exit vault to start new chats' : 'Start a new chat'}
+        >
+          ➕ NEW CHAT
+        </button>
       </div>
 
-      {/* Search results */}
-      {searchResults.length > 0 && (
-        <div style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
-          <p style={{ fontSize: 11, color: 'var(--muted)', padding: '8px 16px 4px', textTransform: 'uppercase', letterSpacing: 1 }}>
-            {searching ? 'Searching…' : 'Results'}
-          </p>
-          {searchResults.map((u) => (
-            <div
-              key={u._id}
-              onClick={() => startChat(u)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 16px', cursor: 'pointer',
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              <Avatar name={u.name} size={36} />
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 600 }}>{u.name}</p>
-                <p style={{ fontSize: 12, color: 'var(--muted)' }}>{u.phone}</p>
+      {/* New Chat Modal */}
+      {showNewChatModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: 'linear-gradient(135deg, var(--surface), var(--surface-2))', padding: 32, borderRadius: 16, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(108,99,255,0.2)', border: '1px solid rgba(108,99,255,0.3)' }}>
+            <h2 style={{ marginBottom: 8, fontSize: 22, fontWeight: 700, textAlign: 'center' }}>💬 New Chat</h2>
+            <p style={{ marginBottom: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>Enter the phone number and optional custom name for this contact</p>
+            <form onSubmit={handleCreateNewChat}>
+              <input
+                type="tel"
+                placeholder="Phone number (e.g., +1234567890)"
+                value={newChatPhone}
+                onChange={(e) => setNewChatPhone(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '2px solid rgba(108,99,255,0.3)',
+                  borderRadius: 10,
+                  color: '#fff',
+                  outline: 'none',
+                  marginBottom: 14,
+                  fontSize: 15,
+                  transition: 'all 0.2s',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(108,99,255,0.6)';
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                  e.currentTarget.style.boxShadow = '0 0 20px rgba(108,99,255,0.2)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(108,99,255,0.3)';
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+                autoFocus
+              />
+              <input
+                type="text"
+                placeholder="Custom name (optional)"
+                value={newChatName}
+                onChange={(e) => setNewChatName(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '2px solid rgba(108,99,255,0.3)',
+                  borderRadius: 10,
+                  color: '#fff',
+                  outline: 'none',
+                  marginBottom: 20,
+                  fontSize: 15,
+                  transition: 'all 0.2s',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(108,99,255,0.6)';
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                  e.currentTarget.style.boxShadow = '0 0 20px rgba(108,99,255,0.2)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(108,99,255,0.3)';
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              />
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewChatModal(false);
+                    setNewChatPhone('');
+                    setNewChatName('');
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '14px 16px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '2px solid rgba(255,255,255,0.15)',
+                    borderRadius: 10,
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingChat}
+                  style={{
+                    flex: 1,
+                    padding: '14px 16px',
+                    background: 'linear-gradient(135deg, #6c63ff, #5a4ecf)',
+                    border: 'none',
+                    borderRadius: 10,
+                    color: '#fff',
+                    cursor: creatingChat ? 'not-allowed' : 'pointer',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    transition: 'all 0.2s',
+                    opacity: creatingChat ? 0.7 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!creatingChat) {
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #7d72ff, #6c63ff)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #6c63ff, #5a4ecf)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  {creatingChat ? '⏳ Creating...' : '✅ Create Chat'}
+                </button>
               </div>
-            </div>
-          ))}
+            </form>
+          </div>
         </div>
       )}
 
