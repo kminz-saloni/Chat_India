@@ -6,6 +6,27 @@ import { useAuth } from '@/context/AuthContext';
 
 let socketInstance: Socket | null = null;
 
+function resolveSocketUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_SOCKET_URL?.trim();
+  if (envUrl) return envUrl;
+
+  if (typeof window === 'undefined') return 'http://localhost:5000';
+
+  const { protocol, hostname } = window.location;
+
+  // GitHub Codespaces forwarded ports use hostnames like:
+  // <codespace>-3000.app.github.dev -> <codespace>-5000.app.github.dev
+  if (hostname.endsWith('.app.github.dev')) {
+    const mappedHost = hostname.replace(/-\d+\.app\.github\.dev$/, '-5000.app.github.dev');
+    if (mappedHost !== hostname) {
+      return `https://${mappedHost}`;
+    }
+  }
+
+  const httpProtocol = protocol === 'https:' ? 'https:' : 'http:';
+  return `${httpProtocol}//${hostname}:5000`;
+}
+
 /**
  * useSocket — manages a singleton Socket.IO connection authenticated with JWT.
  * Returns the socket instance and helper event binders.
@@ -28,9 +49,7 @@ export function useSocket() {
     }
 
     // Route Socket.IO directly to backend (no proxy needed, CORS configured)
-    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-    const SOCKET_URL = `${protocol}//${hostname}:5000`;
+    const SOCKET_URL = resolveSocketUrl();
 
     console.log('[Socket] Connecting to:', SOCKET_URL, { hasToken: !!token });
     socketInstance = io(SOCKET_URL, {
@@ -60,12 +79,13 @@ export function useSocket() {
       console.error('[Socket] Engine error:', error);
     });
 
-    socketInstance.on('connect_error', (err: any) => {
-      const errorMsg = err?.message || err?.data?.message || String(err);
+    socketInstance.on('connect_error', (err: unknown) => {
+      const socketError = err as { message?: string; data?: { message?: string }; type?: string; code?: string | number };
+      const errorMsg = socketError?.message || socketError?.data?.message || String(err);
       console.error('[Socket] ✗ Connection error:', {
         message: errorMsg,
-        type: err?.type,
-        code: err?.code,
+        type: socketError?.type,
+        code: socketError?.code,
       });
     });
 
@@ -111,7 +131,6 @@ export function useSocket() {
   }, []);
 
   return {
-    socket: socketRef.current,
     joinChat,
     sendTypingStart,
     sendTypingStop,
