@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [devOtp, setDevOtp] = useState('');
   const [isNewUser, setIsNewUser] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
 
   const fullPhone = `${countryCode}${phone}`;
 
@@ -82,12 +83,35 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
+    setIsLocked(false);
     try {
       // login() handles auth + crypto key decryption
       await login(fullPhone, password);
       router.push('/chat');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      const msg = err instanceof Error ? err.message : 'Login failed';
+      setError(msg);
+      if (msg.includes('locked')) {
+        setIsLocked(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleUnlock(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await apiRequest('/auth/panic-unlock', {
+        method: 'POST',
+        body: { phone: fullPhone, password },
+      });
+      await login(fullPhone, password);
+      router.push('/chat');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unlock failed');
     } finally {
       setLoading(false);
     }
@@ -167,13 +191,20 @@ export default function LoginPage() {
               🔐 Your password decrypts your private key locally. It never leaves your device.
             </div>
             {error && <div className="error-badge">{error}</div>}
-            <button type="submit" className="btn-primary" disabled={loading || !password}>
-              {loading ? (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  <span className="spinner" /> Decrypting keys…
-                </span>
-              ) : 'Sign In'}
-            </button>
+            
+            {isLocked ? (
+              <button type="button" onClick={handleUnlock} className="btn-primary" style={{ backgroundColor: '#ef4444' }} disabled={loading || !password}>
+                {loading ? <span className="spinner" /> : 'Unlock Account'}
+              </button>
+            ) : (
+              <button type="submit" className="btn-primary" disabled={loading || !password}>
+                {loading ? (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <span className="spinner" /> Decrypting keys…
+                  </span>
+                ) : 'Sign In'}
+              </button>
+            )}
           </form>
         )}
       </div>

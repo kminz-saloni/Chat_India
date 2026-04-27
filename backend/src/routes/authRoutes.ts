@@ -10,6 +10,7 @@ import {
   revokeAllOtherSessions,
   deleteAccount,
   uploadKeys,
+  panicUnlock,
 } from '@/controllers/authController';
 import { authMiddleware } from '@/middleware/auth';
 
@@ -20,6 +21,7 @@ router.post('/request-otp', requestOtp);
 router.post('/verify-otp', verifyOtp);
 router.post('/register', register);
 router.post('/login', login);
+router.post('/panic-unlock', panicUnlock);
 
 // Protected routes
 router.post('/logout', authMiddleware, logout);

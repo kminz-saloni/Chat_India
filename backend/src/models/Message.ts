@@ -17,7 +17,7 @@ const MessageSchema = new Schema<IMessage>(
   {
     chatId: { type: Schema.Types.ObjectId, ref: 'Chat', required: true, index: true },
     senderId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    ciphertext: { type: String, required: true },
+    ciphertext: { type: String, required: function(this: any) { return !this.deleted; } },
     edited: { type: Boolean, default: false },
     deleted: { type: Boolean, default: false },
     reactions: [

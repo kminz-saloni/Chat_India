@@ -146,14 +146,14 @@ export async function login(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  if (user.panicLocked) {
-    res.status(403).json({ message: 'This account is currently locked. Contact support to unlock.' });
-    return;
-  }
-
   const passwordMatch = await bcrypt.compare(password, user.passwordHash);
   if (!passwordMatch) {
     res.status(401).json({ message: 'Invalid credentials' });
+    return;
+  }
+
+  if (user.panicLocked) {
+    res.status(403).json({ message: 'This account is currently locked. Contact support to unlock.' });
     return;
   }
 
@@ -176,6 +176,66 @@ export async function login(req: Request, res: Response): Promise<void> {
 
   res.json({
     message: 'Login successful',
+    token,
+    user: {
+      id: user._id,
+      name: user.name,
+      phone: user.phone,
+      publicKey: user.publicKey,
+      encryptedPrivateKey: user.encryptedPrivateKey,
+    },
+  });
+}
+
+// ─── POST /auth/panic-unlock ──────────────────────────────────────────────────
+export async function panicUnlock(req: Request, res: Response): Promise<void> {
+  const { phone, password } = req.body;
+  if (!phone || !password) {
+    res.status(400).json({ message: 'Phone and password are required' });
+    return;
+  }
+
+  const user = await User.findOne({ phone, deletedAt: null });
+  if (!user) {
+    res.status(401).json({ message: 'Invalid credentials: User not found' });
+    return;
+  }
+
+  if (!user.panicLocked) {
+    res.status(400).json({ message: 'Account is not currently locked' });
+    return;
+  }
+
+  const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+  if (!passwordMatch) {
+    res.status(401).json({ message: 'Invalid credentials: Password incorrect' });
+    return;
+  }
+
+  // Unlock the account
+  user.panicLocked = false;
+  await user.save();
+
+  // Create a new session and log the user in
+  const ip = req.ip || '';
+  const ua = req.headers['user-agent'] || '';
+  const { browser, deviceName } = parseUserAgent(ua);
+  const ipHash = hashIp(ip);
+
+  const session = await Session.create({
+    userId: user._id,
+    deviceName,
+    browser,
+    ipHash,
+    lastActive: new Date(),
+    active: true,
+    trusted: true, // We can consider an unlocked session trusted
+  });
+
+  const token = generateToken(String(user._id), String(session._id));
+
+  res.json({
+    message: 'Account successfully unlocked and logged in',
     token,
     user: {
       id: user._id,

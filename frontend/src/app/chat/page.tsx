@@ -104,7 +104,10 @@ export default function ChatPage() {
   useEffect(() => {
     const offNewMsg = onEvent<Message>('message:new', (msg) => {
       if (msg.chatId === activeChatId) {
-        setMessages((prev) => [...prev, msg]);
+        setMessages((prev) => {
+          if (prev.some((m) => m._id === msg._id)) return prev;
+          return [...prev, msg];
+        });
         // Auto read-receipt
         sendReadReceipt(msg.chatId, [msg._id]);
         // Decrypt immediately
@@ -285,8 +288,14 @@ export default function ChatPage() {
         token,
         body: { chatId: activeChatId, ciphertext, selfDestructAt },
       });
-      // Replace optimistic with real
-      setMessages((prev) => prev.map((m) => (m._id === optimistic._id ? data.message : m)));
+      // Replace optimistic with real or remove optimistic if socket already added it
+      setMessages((prev) => {
+        const alreadyExists = prev.some((m) => m._id === data.message._id);
+        if (alreadyExists) {
+          return prev.filter((m) => m._id !== optimistic._id);
+        }
+        return prev.map((m) => (m._id === optimistic._id ? data.message : m));
+      });
       setDecryptedCache((c) => {
         const next = { ...c, [data.message._id]: plaintext };
         delete next[optimistic._id];
