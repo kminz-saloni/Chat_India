@@ -12,7 +12,7 @@
  *  - Message plaintext (only ciphertext is transmitted)
  */
 
-import _sodium from 'libsodium-wrappers';
+import _sodium from 'libsodium-wrappers-sumo';
 
 let _ready = false;
 
