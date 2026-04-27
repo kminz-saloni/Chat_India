@@ -51,6 +51,8 @@
 
 * Trusted device verification required.
 * Secret code should be configurable.
+* Store panic phrase as hash only (never plaintext).
+* Validate phrase match server-side before panic lock.
 * Audit trigger events.
 * Force revoke all sessions.
 

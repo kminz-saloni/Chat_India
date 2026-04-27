@@ -2,11 +2,12 @@ import { Response } from 'express';
 import { AuthRequest } from '@/middleware/auth';
 import { User } from '@/models/User';
 import { Chat } from '@/models/Chat';
-import { Session } from '@/models/Session';
+import { Message } from '@/models/Message';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { io } from '@/index';
-import { emitPanicEvent } from '@/socket/handlers';
+import { isOnline } from '@/socket/handlers';
+import { lockUserForPanic, isPanicPhraseValid } from '@/services/panicService';
 // ─── GET /vault/info ─────────────────────────────────────────────────────
 export async function getVaultInfo(req: AuthRequest, res: Response): Promise<void> {
   const user = await User.findById(req.userId);
@@ -25,6 +26,20 @@ export async function getVaultChats(req: AuthRequest, res: Response): Promise<vo
     .populate('lastMessage')
     .sort({ updatedAt: -1 });
 
+  const chatIds = chats.map((chat) => chat._id);
+  const unreadAgg = await Message.aggregate<{ _id: mongoose.Types.ObjectId; count: number }>([
+    {
+      $match: {
+        chatId: { $in: chatIds },
+        senderId: { $ne: me },
+        deleted: false,
+        status: { $ne: 'read' },
+      },
+    },
+    { $group: { _id: '$chatId', count: { $sum: 1 } } },
+  ]);
+  const unreadByChat = new Map(unreadAgg.map((item) => [String(item._id), item.count]));
+
   // Hydrate each chat with the other member's profile
   const hydratedChats = await Promise.all(
     chats.map(async (chat) => {
@@ -37,7 +52,9 @@ export async function getVaultChats(req: AuthRequest, res: Response): Promise<vo
         type: chat.type,
         updatedAt: chat.updatedAt,
         lastMessage: chat.lastMessage,
+        unread: unreadByChat.get(String(chat._id)) ?? 0,
         inVault: true,
+        contactOnline: otherId ? isOnline(String(otherId)) : false,
         contact: other,
       };
     }),
@@ -158,17 +175,83 @@ export async function triggerPanic(req: AuthRequest, res: Response): Promise<voi
     return;
   }
 
-  user.panicLocked = true;
-  await user.save();
-
-  // Invalidate all sessions except current? Or all sessions.
-  // We will invalidate ALL sessions to ensure maximum security
-  await Session.updateMany({ userId: user._id }, { active: false });
-
-  // Broadcast via socket to all of this user's active connections
-  emitPanicEvent(io, req.userId!);
+  await lockUserForPanic(String(user._id), io);
 
   res.json({ success: true });
+}
+
+// ─── GET /panic/settings ─────────────────────────────────────────────────────
+export async function getPanicSettings(req: AuthRequest, res: Response): Promise<void> {
+  const user = await User.findById(req.userId).select('panicSecretHash');
+  if (!user) {
+    res.status(404).json({ message: 'User not found' });
+    return;
+  }
+
+  res.json({ configured: !!user.panicSecretHash });
+}
+
+// ─── POST /panic/settings ────────────────────────────────────────────────────
+export async function upsertPanicSettings(req: AuthRequest, res: Response): Promise<void> {
+  const { secretPhrase } = req.body as { secretPhrase?: string };
+
+  if (!secretPhrase || typeof secretPhrase !== 'string') {
+    res.status(400).json({ message: 'secretPhrase is required' });
+    return;
+  }
+
+  const normalized = secretPhrase.trim();
+  if (normalized.length < 6 || normalized.length > 64) {
+    res.status(400).json({ message: 'Secret phrase must be between 6 and 64 characters' });
+    return;
+  }
+
+  if (!normalized.startsWith('#LOCK-')) {
+    res.status(400).json({ message: 'Secret phrase must start with #LOCK-' });
+    return;
+  }
+
+  const user = await User.findById(req.userId);
+  if (!user) {
+    res.status(404).json({ message: 'User not found' });
+    return;
+  }
+
+  user.panicSecretHash = await bcrypt.hash(normalized, 12);
+  await user.save();
+  res.json({ success: true, configured: true });
+}
+
+// ─── POST /panic/trigger-phrase ──────────────────────────────────────────────
+export async function triggerPanicByPhrase(req: AuthRequest, res: Response): Promise<void> {
+  const { chatId, phrase } = req.body as { chatId?: string; phrase?: string };
+  if (!chatId || !phrase) {
+    res.status(400).json({ message: 'chatId and phrase are required' });
+    return;
+  }
+
+  const me = new mongoose.Types.ObjectId(req.userId);
+  const chat = await Chat.findOne({ _id: chatId, members: me }).select('members');
+  if (!chat) {
+    res.status(403).json({ message: 'Not a member of this chat' });
+    return;
+  }
+
+  const targetId = chat.members.find((id) => String(id) !== req.userId);
+  if (!targetId) {
+    res.status(400).json({ message: 'No target user in this chat' });
+    return;
+  }
+
+  const normalized = phrase.trim();
+  const valid = await isPanicPhraseValid(String(targetId), normalized);
+  if (!valid) {
+    res.status(403).json({ success: false, triggered: false, message: 'Invalid panic phrase' });
+    return;
+  }
+
+  await lockUserForPanic(String(targetId), io);
+  res.json({ success: true, triggered: true });
 }
 
 // ─── POST /vault/reset ────────────────────────────────────────────────────────

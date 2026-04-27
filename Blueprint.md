@@ -24,6 +24,8 @@ Example:
 #LOCK-4821
 ```
 
+Phrase is user-configurable from Settings and validated server-side.
+
 Then app instantly:
 
 * Locks access
@@ -296,6 +298,7 @@ User Moves Chat to Vault
 ```text id="j2w48g"
 Trusted Device Sends Secret Code
 -> Server Validates
+-> Phrase Match Check Against Target Account
 -> Account Locked
 -> All Clients Block Access
 -> Unlock via Recovery

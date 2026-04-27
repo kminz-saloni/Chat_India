@@ -39,6 +39,9 @@
 * FR-22: Vault requires PIN or password.
 * FR-23: Trusted device/account can trigger Panic Lock using secret code.
 * FR-24: Panic Lock locks app, hides notifications, wipes local cache, logs out all devices.
+* FR-28: User can configure a panic secret phrase from settings.
+* FR-29: Any authenticated chat participant who sends the exact panic phrase can trigger panic lock for the recipient.
+* FR-30: Presence state in chat list must be server-authoritative and consistent after reconnects.
 
 ### Self-Destruct
 

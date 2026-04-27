@@ -1,18 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0f;
-  --foreground: #e8e8f0;
-  --surface: #12121a;
-  --surface-2: #1a1a26;
-  --border: rgba(255, 255, 255, 0.08);
+  --background: #0f1118;
+  --foreground: #f3f5fb;
+  --surface: #171b25;
+  --surface-2: #1f2532;
+  --border: rgba(243, 245, 251, 0.16);
   --primary: #6c63ff;
   --primary-hover: #7c74ff;
   --primary-glow: rgba(108, 99, 255, 0.35);
   --accent: #ff6b9d;
   --success: #4ade80;
   --error: #f87171;
-  --muted: rgba(255, 255, 255, 0.45);
+  --muted: rgba(243, 245, 251, 0.74);
 }
 
 * {
@@ -27,6 +27,16 @@ html, body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+}
+
+button, input, textarea, select {
+  color: var(--foreground);
+}
+
+select option {
+  background: var(--surface);
+  color: var(--foreground);
 }
 
 /* Glass card */

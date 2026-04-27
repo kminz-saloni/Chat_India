@@ -36,7 +36,7 @@ A privacy-first web chat application focused on secure messaging, hidden privacy
 7. Message edit/delete
 8. Emoji reactions (best-effort)
 9. Hidden Vault (PIN/password)
-10. Panic Lock via secret trusted code
+10. Panic Lock via configurable secret phrase
 11. Self-destruct messages
 12. Multi-session visibility + logout
 13. Account deletion
@@ -53,5 +53,6 @@ A privacy-first web chat application focused on secure messaging, hidden privacy
 
 * Successful signup/login rate > 90%
 * Message delivery latency < 1s on normal network
+* Realtime message and presence state must remain correct without manual refresh
 * Zero plaintext stored on server
 * Stable use with <100 active users

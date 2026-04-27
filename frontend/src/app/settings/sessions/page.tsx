@@ -14,12 +14,21 @@ interface SessionItem {
   current?: boolean;
 }
 
+interface PanicSettingsResponse {
+  configured: boolean;
+}
+
 export default function SessionsPage() {
   const { token, logout, loading } = useAuth();
   const router = useRouter();
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [panicConfigured, setPanicConfigured] = useState(false);
+  const [panicPhrase, setPanicPhrase] = useState('');
+  const [panicPhraseConfirm, setPanicPhraseConfirm] = useState('');
+  const [savingPhrase, setSavingPhrase] = useState(false);
+  const [panicMessage, setPanicMessage] = useState<string | null>(null);
 
   async function fetchSessions() {
     if (!token) {
@@ -27,8 +36,12 @@ export default function SessionsPage() {
       return;
     }
     try {
-      const res = await apiRequest<{ sessions: SessionItem[] }>('/auth/sessions', { token });
-      setSessions(res.sessions);
+      const [sessionRes, panicRes] = await Promise.all([
+        apiRequest<{ sessions: SessionItem[] }>('/auth/sessions', { token }),
+        apiRequest<PanicSettingsResponse>('/panic/settings', { token }),
+      ]);
+      setSessions(sessionRes.sessions);
+      setPanicConfigured(!!panicRes.configured);
     } catch {
       router.push('/auth/login');
     } finally {
@@ -65,6 +78,47 @@ export default function SessionsPage() {
       router.push('/auth/login');
     } catch { /* noop */ } finally {
       setRevoking(null);
+    }
+  }
+
+  async function savePanicPhrase(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token) return;
+
+    setPanicMessage(null);
+    const phrase = panicPhrase.trim();
+    const confirmation = panicPhraseConfirm.trim();
+
+    if (phrase.length < 6) {
+      setPanicMessage('Phrase must be at least 6 characters long.');
+      return;
+    }
+
+    if (!phrase.startsWith('#LOCK-')) {
+      setPanicMessage('Phrase must start with #LOCK- (example: #LOCK-4821).');
+      return;
+    }
+
+    if (phrase !== confirmation) {
+      setPanicMessage('Phrase confirmation does not match.');
+      return;
+    }
+
+    setSavingPhrase(true);
+    try {
+      await apiRequest('/panic/settings', {
+        method: 'POST',
+        token,
+        body: { secretPhrase: phrase },
+      });
+      setPanicConfigured(true);
+      setPanicPhrase('');
+      setPanicPhraseConfirm('');
+      setPanicMessage('Panic phrase saved. Any chat user who sends this exact phrase can lock your account.');
+    } catch (error) {
+      setPanicMessage(error instanceof Error ? error.message : 'Failed to save panic phrase.');
+    } finally {
+      setSavingPhrase(false);
     }
   }
 
@@ -141,6 +195,59 @@ export default function SessionsPage() {
           <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
         ) : (
           <>
+            <div className="glass" style={{ borderRadius: 14, padding: 18, marginBottom: 18, border: '1px solid rgba(255,107,107,0.35)', background: 'linear-gradient(135deg, rgba(255,107,107,0.12), rgba(255,179,71,0.08))' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 700 }}>Emergency Panic Phrase</h2>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: panicConfigured ? 'rgba(74,222,128,0.18)' : 'rgba(248,113,113,0.18)', color: panicConfigured ? 'var(--success)' : 'var(--error)' }}>
+                  {panicConfigured ? 'CONFIGURED' : 'NOT CONFIGURED'}
+                </span>
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 12 }}>
+                Set a secret phrase (example: #LOCK-4821). If any user sends this exact phrase to you in chat, your account is panic-locked immediately and all sessions are revoked.
+              </p>
+              <form onSubmit={savePanicPhrase} style={{ display: 'grid', gap: 10 }}>
+                <input
+                  type="password"
+                  value={panicPhrase}
+                  onChange={(e) => setPanicPhrase(e.target.value)}
+                  placeholder="Enter panic phrase"
+                  className="input-field"
+                  style={{ padding: '12px 14px', borderRadius: 10 }}
+                />
+                <input
+                  type="password"
+                  value={panicPhraseConfirm}
+                  onChange={(e) => setPanicPhraseConfirm(e.target.value)}
+                  placeholder="Confirm panic phrase"
+                  className="input-field"
+                  style={{ padding: '12px 14px', borderRadius: 10 }}
+                />
+                <button
+                  type="submit"
+                  disabled={savingPhrase || !panicPhrase || !panicPhraseConfirm}
+                  style={{
+                    justifySelf: 'start',
+                    background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
+                    border: 'none',
+                    borderRadius: 10,
+                    padding: '10px 16px',
+                    color: 'white',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: savingPhrase ? 'not-allowed' : 'pointer',
+                    opacity: savingPhrase ? 0.7 : 1,
+                  }}
+                >
+                  {savingPhrase ? 'Saving...' : panicConfigured ? 'Update Phrase' : 'Set Phrase'}
+                </button>
+              </form>
+              {panicMessage && (
+                <p style={{ marginTop: 10, fontSize: 12, color: panicMessage.toLowerCase().includes('failed') || panicMessage.toLowerCase().includes('match') ? 'var(--error)' : 'var(--success)' }}>
+                  {panicMessage}
+                </p>
+              )}
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {sessions.map((s) => (
                 <div key={s._id} className="glass" style={{ borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

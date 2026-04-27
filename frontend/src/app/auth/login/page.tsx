@@ -10,7 +10,7 @@ type Step = 'phone' | 'otp' | 'password';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, setAuth, unlockCrypto } = useAuth();
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
@@ -104,11 +104,14 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await apiRequest('/auth/panic-unlock', {
+      const data = await apiRequest<{ token: string; user: { id: string; name: string; phone: string; publicKey?: string; encryptedPrivateKey?: string } }>('/auth/panic-unlock', {
         method: 'POST',
         body: { phone: fullPhone, password },
       });
-      await login(fullPhone, password);
+
+      // Reuse the session returned by panic-unlock to avoid creating a second session.
+      setAuth(data.user, data.token);
+      await unlockCrypto(password);
       router.push('/chat');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unlock failed');

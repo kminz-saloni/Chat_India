@@ -98,7 +98,7 @@ export default function MessageArea({
         <p style={{ fontSize: 15, maxWidth: 300, textAlign: 'center', lineHeight: 1.5 }}>
           Select a conversation from the sidebar or start a new encrypted chat to begin messaging.
         </p>
-        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', marginTop: 24, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 24, display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ color: 'var(--success)' }}>●</span> End-to-end Encrypted
         </p>
       </div>
@@ -142,20 +142,20 @@ export default function MessageArea({
             {isTyping ? '✍️ typing…' : isOnline ? '● Online' : 'Offline'}
           </p>
         </div>
-        <div style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => { setShowSearch(!showSearch); setSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 16 }} title="Search chat">🔍</button>
           🔒 E2EE
         </div>
       </div>
 
       {showSearch && (
-        <div style={{ padding: '8px 20px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ padding: '8px 20px', background: 'rgba(243,245,251,0.08)', borderBottom: '1px solid var(--border)' }}>
           <input
             type="text"
             placeholder="Search messages..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ width: '100%', padding: '6px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--foreground)', outline: 'none' }}
+            style={{ width: '100%', padding: '8px 12px', background: 'rgba(243,245,251,0.1)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--foreground)', outline: 'none' }}
           />
         </div>
       )}
@@ -169,7 +169,7 @@ export default function MessageArea({
           <button
             onClick={onLoadMore}
             disabled={loading}
-            style={{ alignSelf: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)', borderRadius: 20, padding: '6px 16px', color: 'var(--muted)', fontSize: 12, cursor: 'pointer', marginBottom: 8 }}
+            style={{ alignSelf: 'center', background: 'rgba(243,245,251,0.14)', border: '1px solid var(--border)', borderRadius: 20, padding: '6px 16px', color: 'var(--foreground)', fontSize: 12, cursor: 'pointer', marginBottom: 8 }}
           >
             {loading ? <span className="spinner" style={{ width: 12, height: 12 }} /> : 'Load earlier messages'}
           </button>
@@ -179,7 +179,7 @@ export default function MessageArea({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 0' }}>
             {[1, 2, 3].map((i) => (
               <div key={i} style={{ display: 'flex', justifyContent: i % 2 === 0 ? 'flex-end' : 'flex-start', opacity: 1 - i * 0.2 }}>
-                <div style={{ width: 180 + (i * 30), height: 44, borderRadius: i % 2 === 0 ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: 'rgba(255,255,255,0.05)' }} />
+                <div style={{ width: 180 + (i * 30), height: 44, borderRadius: i % 2 === 0 ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: 'rgba(243,245,251,0.12)' }} />
               </div>
             ))}
           </div>
@@ -204,7 +204,7 @@ export default function MessageArea({
               <div key={msg._id}>
                 {showDate && (
                   <div style={{ textAlign: 'center', margin: '12px 0 4px' }}>
-                    <span style={{ fontSize: 11, color: 'var(--muted)', background: 'rgba(255,255,255,0.05)', padding: '2px 10px', borderRadius: 10 }}>
+                    <span style={{ fontSize: 11, color: 'var(--foreground)', background: 'rgba(243,245,251,0.14)', padding: '2px 10px', borderRadius: 10 }}>
                       {formatDate(msg.createdAt)}
                     </span>
                   </div>
@@ -250,8 +250,8 @@ export default function MessageArea({
           rows={1}
           style={{
             flex: 1,
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.1)',
+            background: 'rgba(243,245,251,0.12)',
+            border: '1px solid rgba(243,245,251,0.24)',
             borderRadius: 12,
             padding: '12px 14px',
             color: 'var(--foreground)',
@@ -276,8 +276,8 @@ export default function MessageArea({
               onChange={(e) => setExpirySeconds(Number(e.target.value))}
               title="Self-Destruct Timer"
               style={{
-                background: expirySeconds > 0 ? 'var(--primary)' : 'rgba(255,255,255,0.08)',
-                border: 'none',
+                background: expirySeconds > 0 ? 'var(--primary)' : 'rgba(243,245,251,0.14)',
+                border: '1px solid rgba(243,245,251,0.24)',
                 color: '#fff',
                 height: 44,
                 borderRadius: 22,
@@ -304,7 +304,7 @@ export default function MessageArea({
           disabled={!input.trim() || sending}
           style={{
             width: 44, height: 44, borderRadius: '50%',
-            background: input.trim() ? 'linear-gradient(135deg, #6c63ff, #9b5de5)' : 'rgba(255,255,255,0.08)',
+            background: input.trim() ? 'linear-gradient(135deg, #6c63ff, #9b5de5)' : 'rgba(243,245,251,0.16)',
             border: 'none', cursor: input.trim() ? 'pointer' : 'not-allowed',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 18, transition: 'all 0.2s', flexShrink: 0,
@@ -330,6 +330,9 @@ function MessageBubble({
   const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const [showActions, setShowActions] = useState(false);
   const emojis = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+  const receiptState = msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : 'sent';
+  const receiptColor = receiptState === 'read' ? '#4ade80' : receiptState === 'delivered' ? '#7dd3fc' : 'var(--foreground)';
+  const receiptLabel = receiptState === 'read' ? 'Read' : receiptState === 'delivered' ? 'Delivered' : 'Sent';
 
   // Calculate if message is expiring soon for visual cue
   const [timeLeft, setTimeLeft] = useState<string | null>(null);
@@ -369,7 +372,7 @@ function MessageBubble({
         <div style={{
           background: isMine
             ? 'linear-gradient(135deg, rgba(108,99,255,0.8), rgba(155,93,229,0.8))'
-            : 'rgba(255,255,255,0.07)',
+            : 'rgba(243,245,251,0.16)',
           borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
           padding: '10px 14px',
           backdropFilter: 'blur(8px)',
@@ -400,13 +403,14 @@ function MessageBubble({
                 ⏳ {timeLeft || '...'}
               </span>
             )}
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{time}</span>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{time}</span>
             {isMine && (
-              <span style={{ fontSize: 11, color: msg.status === 'read' ? '#6c63ff' : 'rgba(255,255,255,0.4)', display: 'flex', gap: 1 }}>
-                {isOpt ? '○' : msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : '✓'}
+              <span title={receiptLabel} style={{ fontSize: 12, fontWeight: 700, color: receiptColor, display: 'flex', gap: 3, alignItems: 'center' }}>
+                {isOpt ? '○' : receiptState === 'read' ? '✓✓' : receiptState === 'delivered' ? '✓✓' : '✓'}
+                <span style={{ fontSize: 10, color: receiptColor, opacity: 0.95 }}>{receiptLabel}</span>
               </span>
             )}
-            {msg.edited && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginLeft: 4 }}>edited</span>}
+            {msg.edited && <span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 4 }}>edited</span>}
           </div>
 
           {/* Reactions Display */}

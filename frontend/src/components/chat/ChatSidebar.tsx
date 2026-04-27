@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { apiRequest } from '@/lib/api';
 import { toast } from 'react-hot-toast';
 import type { ChatItem, Contact } from '@/app/chat/page';
@@ -65,8 +65,9 @@ export default function ChatSidebar({
       setShowNewChatModal(false);
       toast.success('Chat created successfully!');
       onChatCreated();
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to create chat');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create chat';
+      toast.error(message);
     } finally {
       setCreatingChat(false);
     }
@@ -235,10 +236,10 @@ export default function ChatSidebar({
                 style={{
                   width: '100%',
                   padding: '14px 16px',
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '2px solid rgba(108,99,255,0.3)',
+                  background: 'rgba(243,245,251,0.12)',
+                  border: '2px solid rgba(108,99,255,0.45)',
                   borderRadius: 10,
-                  color: '#fff',
+                  color: 'var(--foreground)',
                   outline: 'none',
                   marginBottom: 14,
                   fontSize: 15,
@@ -246,12 +247,12 @@ export default function ChatSidebar({
                 }}
                 onFocus={(e) => {
                   e.currentTarget.style.borderColor = 'rgba(108,99,255,0.6)';
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                  e.currentTarget.style.background = 'rgba(243,245,251,0.16)';
                   e.currentTarget.style.boxShadow = '0 0 20px rgba(108,99,255,0.2)';
                 }}
                 onBlur={(e) => {
                   e.currentTarget.style.borderColor = 'rgba(108,99,255,0.3)';
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.background = 'rgba(243,245,251,0.12)';
                   e.currentTarget.style.boxShadow = 'none';
                 }}
                 autoFocus
@@ -264,10 +265,10 @@ export default function ChatSidebar({
                 style={{
                   width: '100%',
                   padding: '14px 16px',
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '2px solid rgba(108,99,255,0.3)',
+                  background: 'rgba(243,245,251,0.12)',
+                  border: '2px solid rgba(108,99,255,0.45)',
                   borderRadius: 10,
-                  color: '#fff',
+                  color: 'var(--foreground)',
                   outline: 'none',
                   marginBottom: 20,
                   fontSize: 15,
@@ -275,12 +276,12 @@ export default function ChatSidebar({
                 }}
                 onFocus={(e) => {
                   e.currentTarget.style.borderColor = 'rgba(108,99,255,0.6)';
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                  e.currentTarget.style.background = 'rgba(243,245,251,0.16)';
                   e.currentTarget.style.boxShadow = '0 0 20px rgba(108,99,255,0.2)';
                 }}
                 onBlur={(e) => {
                   e.currentTarget.style.borderColor = 'rgba(108,99,255,0.3)';
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.background = 'rgba(243,245,251,0.12)';
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               />
@@ -295,22 +296,22 @@ export default function ChatSidebar({
                   style={{
                     flex: 1,
                     padding: '14px 16px',
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '2px solid rgba(255,255,255,0.15)',
+                    background: 'rgba(243,245,251,0.1)',
+                    border: '2px solid rgba(243,245,251,0.3)',
                     borderRadius: 10,
-                    color: '#fff',
+                    color: 'var(--foreground)',
                     cursor: 'pointer',
                     fontSize: 14,
                     fontWeight: 600,
                     transition: 'all 0.2s',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
+                    e.currentTarget.style.background = 'rgba(243,245,251,0.18)';
+                    e.currentTarget.style.borderColor = 'rgba(243,245,251,0.38)';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+                    e.currentTarget.style.background = 'rgba(243,245,251,0.1)';
+                    e.currentTarget.style.borderColor = 'rgba(243,245,251,0.3)';
                   }}
                 >
                   Cancel
@@ -356,10 +357,10 @@ export default function ChatSidebar({
           <div>
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', opacity: 1 - i * 0.15 }}>
-                <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }} />
+                <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(243,245,251,0.14)', flexShrink: 0 }} />
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ width: '60%', height: 14, borderRadius: 4, background: 'rgba(255,255,255,0.05)' }} />
-                  <div style={{ width: '40%', height: 10, borderRadius: 4, background: 'rgba(255,255,255,0.03)' }} />
+                  <div style={{ width: '60%', height: 14, borderRadius: 4, background: 'rgba(243,245,251,0.14)' }} />
+                  <div style={{ width: '40%', height: 10, borderRadius: 4, background: 'rgba(243,245,251,0.1)' }} />
                 </div>
               </div>
             ))}
@@ -378,7 +379,7 @@ export default function ChatSidebar({
               key={chat._id}
               chat={chat}
               active={chat._id === activeChatId}
-              online={!!onlineUsers[chat.contact?._id]}
+              online={!!onlineUsers[String(chat.contact?._id)]}
               onClick={() => onSelectChat(chat)}
               onMoveToVault={onMoveToVault ? () => onMoveToVault(chat._id) : undefined}
               inVault={showVault}
@@ -393,6 +394,7 @@ export default function ChatSidebar({
 function ChatRow({ chat, active, online, onClick, onMoveToVault, inVault }: { chat: ChatItem; active: boolean; online: boolean; onClick: () => void; onMoveToVault?: () => void; inVault?: boolean }) {
   const name = chat.contact?.name ?? 'Unknown';
   const time = chat.updatedAt ? new Date(chat.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  const unread = chat.unread ?? 0;
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -404,11 +406,11 @@ function ChatRow({ chat, active, online, onClick, onMoveToVault, inVault }: { ch
       style={{
         display: 'flex', alignItems: 'center', gap: 12,
         padding: '12px 16px', cursor: 'pointer',
-        background: active ? 'rgba(108,99,255,0.12)' : 'transparent',
+        background: active ? 'rgba(108,99,255,0.2)' : 'transparent',
         borderLeft: active ? '3px solid var(--primary)' : '3px solid transparent',
         transition: 'background 0.2s ease, border-color 0.2s ease',
       }}
-      onMouseEnter={(e) => { setHovered(true); if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+      onMouseEnter={(e) => { setHovered(true); if (!active) e.currentTarget.style.background = 'rgba(243,245,251,0.1)'; }}
       onMouseLeave={(e) => { setHovered(false); if (!active) e.currentTarget.style.background = 'transparent'; }}
     >
       <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -425,7 +427,26 @@ function ChatRow({ chat, active, online, onClick, onMoveToVault, inVault }: { ch
       <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <p style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</p>
-          <span style={{ fontSize: 11, color: 'var(--muted)', flexShrink: 0, marginLeft: 6 }}>{time}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 6, flexShrink: 0 }}>
+            {unread > 0 && (
+              <span style={{
+                minWidth: 18,
+                height: 18,
+                borderRadius: 999,
+                padding: '0 6px',
+                background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                color: '#fff',
+                fontSize: 10,
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                {unread > 99 ? '99+' : unread}
+              </span>
+            )}
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>{time}</span>
+          </div>
         </div>
         <p style={{ fontSize: 12, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
           🔒 Encrypted
@@ -448,7 +469,7 @@ function ChatRow({ chat, active, online, onClick, onMoveToVault, inVault }: { ch
               padding: '2px 6px',
               fontSize: 10,
               cursor: 'pointer',
-              color: 'var(--muted)'
+              color: 'var(--foreground)'
             }}
           >
             {inVault ? "Remove" : "Move to Vault"}

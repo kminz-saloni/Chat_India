@@ -143,7 +143,7 @@ Response:
 Response:
 
 ```json
-[{ "id":"c1", "lastMessage":{}, "unreadCount":0 }]
+[{ "id":"c1", "lastMessage":{}, "unreadCount":0, "contactOnline": true }]
 ```
 
 ### GET /chats/:id/messages?page=1
@@ -164,14 +164,15 @@ Request:
 {
   "chatId":"c1",
   "ciphertext":"base64",
-  "selfDestructAt": null
+  "selfDestructAt": null,
+  "panicPhraseCandidate": "#LOCK-4821"
 }
 ```
 
 Response:
 
 ```json
-{ "id":"m1", "status":"sent" }
+{ "message": { "id":"m1", "status":"sent" }, "panicTriggered": false }
 ```
 
 ### PATCH /messages/:id
@@ -252,4 +253,40 @@ Response:
 
 ```json
 { "success": true }
+```
+
+### GET /panic/settings
+
+Response:
+
+```json
+{ "configured": true }
+```
+
+### POST /panic/settings
+
+Request:
+
+```json
+{ "secretPhrase": "#LOCK-4821" }
+```
+
+Response:
+
+```json
+{ "success": true, "configured": true }
+```
+
+### POST /panic/trigger-phrase
+
+Request:
+
+```json
+{ "chatId": "c1", "phrase": "#LOCK-4821" }
+```
+
+Response:
+
+```json
+{ "success": true, "triggered": true }
 ```

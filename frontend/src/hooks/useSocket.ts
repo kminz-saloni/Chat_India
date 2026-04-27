@@ -5,6 +5,17 @@ import { io, Socket } from 'socket.io-client';
 import { useAuth } from '@/context/AuthContext';
 
 let socketInstance: Socket | null = null;
+type SocketEventHandler = (data: unknown) => void;
+const pendingEventHandlers = new Map<string, Set<SocketEventHandler>>();
+
+function attachPendingHandlers(socket: Socket) {
+  for (const [event, handlers] of pendingEventHandlers.entries()) {
+    for (const handler of handlers) {
+      socket.off(event, handler);
+      socket.on(event, handler);
+    }
+  }
+}
 
 function resolveSocketUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_SOCKET_URL?.trim();
@@ -45,6 +56,7 @@ export function useSocket() {
     if (socketInstance && socketInstance.connected) {
       console.log('[Socket] Reusing existing connection');
       socketRef.current = socketInstance;
+      attachPendingHandlers(socketInstance);
       return;
     }
 
@@ -64,6 +76,7 @@ export function useSocket() {
 
     socketInstance.on('connect', () => {
       console.log('[Socket] ✓ Connected via', socketInstance?.io?.engine?.transport?.name, ':', socketInstance?.id);
+      if (socketInstance) attachPendingHandlers(socketInstance);
     });
 
     socketInstance.on('disconnect', (reason) => {
@@ -90,6 +103,7 @@ export function useSocket() {
     });
 
     socketRef.current = socketInstance;
+    attachPendingHandlers(socketInstance);
 
     return () => {
       // Don't disconnect on every re-render — only on logout (token = null)
@@ -126,8 +140,27 @@ export function useSocket() {
   }, []);
 
   const onEvent = useCallback(<T>(event: string, handler: (data: T) => void) => {
-    socketRef.current?.on(event, handler);
-    return () => { socketRef.current?.off(event, handler); };
+    const normalizedHandler = handler as SocketEventHandler;
+    let handlers = pendingEventHandlers.get(event);
+    if (!handlers) {
+      handlers = new Set();
+      pendingEventHandlers.set(event, handlers);
+    }
+    handlers.add(normalizedHandler);
+
+    if (socketRef.current) {
+      socketRef.current.off(event, normalizedHandler);
+      socketRef.current.on(event, normalizedHandler);
+    }
+
+    return () => {
+      const eventHandlers = pendingEventHandlers.get(event);
+      if (eventHandlers) {
+        eventHandlers.delete(normalizedHandler);
+        if (eventHandlers.size === 0) pendingEventHandlers.delete(event);
+      }
+      socketRef.current?.off(event, normalizedHandler);
+    };
   }, []);
 
   return {

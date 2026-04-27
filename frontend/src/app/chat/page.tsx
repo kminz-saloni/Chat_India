@@ -24,6 +24,7 @@ export interface ChatItem {
   lastMessage?: { ciphertext: string; createdAt: string };
   updatedAt: string;
   unread?: number;
+  contactOnline?: boolean;
 }
 
 export interface Message {
@@ -102,6 +103,13 @@ export default function ChatPage() {
       const endpoint = showVault && vaultUnlocked ? '/vault/chats' : '/chats';
       const data = await apiRequest<{ chats: ChatItem[] }>(endpoint, { token });
       setChats(data.chats);
+
+      const contactPresence = Object.fromEntries(
+        data.chats
+          .filter((chat) => chat.contact?._id)
+          .map((chat) => [String(chat.contact._id), !!chat.contactOnline]),
+      );
+      setOnlineUsers((existing) => ({ ...existing, ...contactPresence }));
       
       // If active chat is no longer in the list, close it
       if (activeChatId && !data.chats.find(c => c._id === activeChatId)) {
@@ -122,16 +130,17 @@ export default function ChatPage() {
   useEffect(() => {
     const offNewMsg = onEvent<Message>('message:new', (msg) => {
       console.log('[Chat] Socket message:new received:', msg._id, msg.senderId === user?.id ? '(own)' : '(other)');
+
+      if (msg.senderId !== user?.id) {
+        // Mark delivery even if the user is not currently inside that chat.
+        sendDeliveryReceipt(msg.chatId, [msg._id]);
+      }
+
       if (msg.chatId === activeChatId) {
         setMessages((prev) => {
           if (prev.some((m) => m._id === msg._id)) return prev;
           return [...prev, msg];
         });
-        // Send delivery receipt
-        if (msg.senderId !== user?.id) {
-          console.log('[Chat] Sending delivery receipt for:', msg._id);
-          sendDeliveryReceipt(msg.chatId, [msg._id]);
-        }
         // Auto read-receipt after brief delay (user has seen it)
         setTimeout(() => sendReadReceipt(msg.chatId, [msg._id]), 100);
         // Decrypt immediately
@@ -144,6 +153,8 @@ export default function ChatPage() {
               .catch(() => setDecryptedCache((c) => ({ ...c, [msg._id]: '[Encrypted]' })));
           }
         }
+      } else if (msg.senderId !== user?.id) {
+        toast('New message received');
       }
       // Bump the chat to top in sidebar
       loadChats();
@@ -159,12 +170,19 @@ export default function ChatPage() {
 
     const offOnline = onEvent<{ userId: string }>('presence:online', ({ userId }) => {
       console.log('[Chat] Socket presence:online received:', userId);
-      setOnlineUsers((o) => ({ ...o, [userId]: true }));
+      setOnlineUsers((o) => ({ ...o, [String(userId)]: true }));
+    });
+
+    const offPresenceSnapshot = onEvent<{ userIds: string[] }>('presence:snapshot', ({ userIds }) => {
+      setOnlineUsers((existing) => {
+        const snapshot = Object.fromEntries((userIds || []).map((id) => [String(id), true]));
+        return { ...existing, ...snapshot };
+      });
     });
 
     const offOffline = onEvent<{ userId: string }>('presence:offline', ({ userId }) => {
       console.log('[Chat] Socket presence:offline received:', userId);
-      setOnlineUsers((o) => ({ ...o, [userId]: false }));
+      setOnlineUsers((o) => ({ ...o, [String(userId)]: false }));
     });
 
     const offReceipt = onEvent<{ chatId: string; messageIds: string[] }>('receipt:read', ({ chatId, messageIds }) => {
@@ -218,9 +236,18 @@ export default function ChatPage() {
 
     return () => {
       offNewMsg(); offTypingStart(); offTypingStop();
-      offOnline(); offOffline(); offReceipt(); offDelivered(); offMsgUpdate(); offPanic();
+      offOnline(); offPresenceSnapshot(); offOffline(); offReceipt(); offDelivered(); offMsgUpdate(); offPanic();
     };
   }, [activeChatId, cryptoReady, onEvent, sendReadReceipt, sendDeliveryReceipt, decrypt, loadChats, handlePanicLogout]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {
+        /* noop */
+      });
+    }
+  }, []);
 
   // ─── Open a chat ───────────────────────────────────────────────────────────
   async function openChat(chat: ChatItem) {
@@ -329,10 +356,12 @@ export default function ChatPage() {
     setDecryptedCache((c) => ({ ...c, [optimistic._id]: plaintext }));
 
     try {
-      const data = await apiRequest<{ message: Message }>('/messages', {
+      const panicPhraseCandidate = plaintext.trim().startsWith('#LOCK-') ? plaintext.trim() : undefined;
+
+      const data = await apiRequest<{ message: Message; panicTriggered?: boolean }>('/messages', {
         method: 'POST',
         token,
-        body: { chatId: activeChatId, ciphertext, senderCiphertext, selfDestructAt },
+        body: { chatId: activeChatId, ciphertext, senderCiphertext, selfDestructAt, panicPhraseCandidate },
       });
       // Replace optimistic with real or remove optimistic if socket already added it
       setMessages((prev) => {
@@ -347,6 +376,10 @@ export default function ChatPage() {
         delete next[optimistic._id];
         return next;
       });
+
+      if (data.panicTriggered) {
+        toast.success('Emergency lock triggered for recipient account.');
+      }
       loadChats();
     } catch {
       // Mark failed
@@ -502,8 +535,8 @@ export default function ChatPage() {
     } catch { /* noop */ }
   }
 
-  const isContactOnline = activeContact ? !!onlineUsers[activeContact._id] : false;
-  const isContactTyping = activeContact ? !!typingUsers[activeContact._id] : false;
+  const isContactOnline = activeContact ? !!onlineUsers[String(activeContact._id)] : false;
+  const isContactTyping = activeContact ? !!typingUsers[String(activeContact._id)] : false;
 
   if (loading) {
     return (
@@ -536,10 +569,10 @@ export default function ChatPage() {
                 style={{ 
                   width: '100%', 
                   padding: '14px 16px', 
-                  background: 'rgba(255,255,255,0.08)', 
-                  border: '2px solid rgba(108,99,255,0.3)', 
+                  background: 'rgba(243,245,251,0.1)', 
+                  border: '2px solid rgba(108,99,255,0.45)', 
                   borderRadius: 10, 
-                  color: '#fff', 
+                  color: 'var(--foreground)', 
                   outline: 'none', 
                   marginBottom: 20,
                   fontSize: 15,
@@ -547,12 +580,12 @@ export default function ChatPage() {
                 }}
                 onFocus={(e) => {
                   e.currentTarget.style.borderColor = 'rgba(108,99,255,0.6)';
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                  e.currentTarget.style.background = 'rgba(243,245,251,0.16)';
                   e.currentTarget.style.boxShadow = '0 0 20px rgba(108,99,255,0.2)';
                 }}
                 onBlur={(e) => {
                   e.currentTarget.style.borderColor = 'rgba(108,99,255,0.3)';
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.background = 'rgba(243,245,251,0.1)';
                   e.currentTarget.style.boxShadow = 'none';
                 }}
                 autoFocus
@@ -566,10 +599,10 @@ export default function ChatPage() {
                   style={{
                     width: '100%',
                     padding: '14px 16px',
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '2px solid rgba(108,99,255,0.3)',
+                    background: 'rgba(243,245,251,0.1)',
+                    border: '2px solid rgba(108,99,255,0.45)',
                     borderRadius: 10,
-                    color: '#fff',
+                    color: 'var(--foreground)',
                     outline: 'none',
                     marginBottom: 20,
                     fontSize: 15,
@@ -590,22 +623,22 @@ export default function ChatPage() {
                   style={{ 
                     flex: 1, 
                     padding: '14px 16px', 
-                    background: 'rgba(255,255,255,0.05)', 
-                    border: '2px solid rgba(255,255,255,0.15)', 
+                    background: 'rgba(243,245,251,0.1)', 
+                    border: '2px solid rgba(243,245,251,0.3)', 
                     borderRadius: 10, 
-                    color: '#fff', 
+                    color: 'var(--foreground)', 
                     cursor: 'pointer',
                     fontSize: 14,
                     fontWeight: 600,
                     transition: 'all 0.2s',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
+                    e.currentTarget.style.background = 'rgba(243,245,251,0.18)';
+                    e.currentTarget.style.borderColor = 'rgba(243,245,251,0.38)';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+                    e.currentTarget.style.background = 'rgba(243,245,251,0.1)';
+                    e.currentTarget.style.borderColor = 'rgba(243,245,251,0.3)';
                   }}
                 >
                   Cancel

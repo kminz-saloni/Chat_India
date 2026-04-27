@@ -34,8 +34,8 @@ export default function CryptoUnlockBanner() {
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 999,
-      background: 'rgba(10,10,15,0.92)', backdropFilter: 'blur(12px)',
-      borderBottom: '1px solid rgba(108,99,255,0.3)',
+      background: 'rgba(15,17,24,0.96)', backdropFilter: 'blur(12px)',
+      borderBottom: '1px solid rgba(108,99,255,0.45)',
       padding: '12px 20px',
       display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
     }}>
@@ -44,7 +44,7 @@ export default function CryptoUnlockBanner() {
         <p style={{ fontSize: 13, fontWeight: 600, color: '#e8e8f0', marginBottom: 2 }}>
           Messages are encrypted
         </p>
-        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+        <p style={{ fontSize: 12, color: 'var(--muted)' }}>
           Re-enter your password to decrypt your private key
         </p>
         {(cryptoError || localError) && (
@@ -58,11 +58,11 @@ export default function CryptoUnlockBanner() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           style={{
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.12)',
+            background: 'rgba(243,245,251,0.12)',
+            border: '1px solid rgba(243,245,251,0.3)',
             borderRadius: 8,
             padding: '8px 12px',
-            color: '#e8e8f0',
+            color: 'var(--foreground)',
             fontSize: 13,
             outline: 'none',
             width: 180,

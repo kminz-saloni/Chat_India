@@ -74,6 +74,10 @@ export function registerSocketHandlers(io: Server): void {
 
     addOnline(userId, socket.id);
 
+    // Send initial presence so new clients know who is already online.
+    const onlineUserIds = Array.from(onlineUsers.keys()).filter((id) => id !== userId);
+    socket.emit('presence:snapshot', { userIds: onlineUserIds });
+
     // ─── Join personal room for user-specific events (e.g. panic) ──────────────
     socket.join(`user:${userId}`);
     socket.join(`session:${sessionId}`);
@@ -159,6 +163,13 @@ export function registerSocketHandlers(io: Server): void {
  */
 export function emitNewMessage(io: Server, chatId: string, message: unknown): void {
   io.to(`chat:${chatId}`).emit('message:new', message);
+}
+
+export function emitNewMessageToUsers(io: Server, userIds: string[], message: unknown): void {
+  const uniqueUserIds = Array.from(new Set(userIds.map((id) => String(id))));
+  uniqueUserIds.forEach((userId) => {
+    io.to(`user:${userId}`).emit('message:new', message);
+  });
 }
 
 /**

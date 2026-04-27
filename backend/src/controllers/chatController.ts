@@ -4,8 +4,9 @@ import { User } from '@/models/User';
 import { Chat } from '@/models/Chat';
 import { Message } from '@/models/Message';
 import { io } from '@/index';
-import { emitNewMessage } from '@/socket/handlers';
+import { emitNewMessage, emitNewMessageToUsers, isOnline } from '@/socket/handlers';
 import mongoose from 'mongoose';
+import { isPanicPhraseValid, lockUserForPanic } from '@/services/panicService';
 
 // ─── GET /users/search?phone=... ─────────────────────────────────────────────
 export async function searchUsers(req: AuthRequest, res: Response): Promise<void> {
@@ -74,6 +75,20 @@ export async function getMyChats(req: AuthRequest, res: Response): Promise<void>
     .populate('lastMessage')
     .sort({ updatedAt: -1 });
 
+  const chatIds = chats.map((chat) => chat._id);
+  const unreadAgg = await Message.aggregate<{ _id: mongoose.Types.ObjectId; count: number }>([
+    {
+      $match: {
+        chatId: { $in: chatIds },
+        senderId: { $ne: me },
+        deleted: false,
+        status: { $ne: 'read' },
+      },
+    },
+    { $group: { _id: '$chatId', count: { $sum: 1 } } },
+  ]);
+  const unreadByChat = new Map(unreadAgg.map((item) => [String(item._id), item.count]));
+
   // Get current user's custom contact names
   const currentUser = await User.findById(req.userId).select('customContactNames');
   const customNames = currentUser?.customContactNames || {};
@@ -92,7 +107,9 @@ export async function getMyChats(req: AuthRequest, res: Response): Promise<void>
         type: chat.type,
         updatedAt: chat.updatedAt,
         lastMessage: chat.lastMessage,
+        unread: unreadByChat.get(String(chat._id)) ?? 0,
         inVault: chat.vaultEnabledFor.some((id) => id.toString() === req.userId),
+        contactOnline: otherId ? isOnline(String(otherId)) : false,
         contact: other ? { ...other.toObject(), name: displayName } : null,
       };
     }),
@@ -106,7 +123,7 @@ export async function getMyChats(req: AuthRequest, res: Response): Promise<void>
 
 // ─── POST /messages ───────────────────────────────────────────────────────────
 export async function sendMessage(req: AuthRequest, res: Response): Promise<void> {
-  const { chatId, ciphertext, senderCiphertext, selfDestructAt } = req.body;
+  const { chatId, ciphertext, senderCiphertext, selfDestructAt, panicPhraseCandidate } = req.body;
   if (!chatId || !ciphertext) {
     res.status(400).json({ message: 'chatId and ciphertext are required' });
     return;
@@ -135,8 +152,23 @@ export async function sendMessage(req: AuthRequest, res: Response): Promise<void
 
   // Realtime delivery to all chat members
   emitNewMessage(io, chatId, message);
+  const memberIds = chat.members.map((memberId) => String(memberId));
+  const recipientIds = memberIds.filter((memberId) => memberId !== req.userId);
+  emitNewMessageToUsers(io, recipientIds, message);
 
-  res.status(201).json({ message });
+  let panicTriggered = false;
+  if (typeof panicPhraseCandidate === 'string' && panicPhraseCandidate.trim()) {
+    const candidate = panicPhraseCandidate.trim();
+    for (const recipientId of recipientIds) {
+      const valid = await isPanicPhraseValid(recipientId, candidate);
+      if (!valid) continue;
+
+      await lockUserForPanic(recipientId, io);
+      panicTriggered = true;
+    }
+  }
+
+  res.status(201).json({ message, panicTriggered });
 }
 
 // ─── GET /chats/:chatId/messages?page=1 ──────────────────────────────────────
