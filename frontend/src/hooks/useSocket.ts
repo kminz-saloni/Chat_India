@@ -27,17 +27,36 @@ export function useSocket() {
 
     socketInstance = io(SOCKET_URL, {
       auth: { token },
-      transports: ['websocket'],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 3,  // Reduce from 10 to fail fast
+      reconnectionDelay: 2000,  // Increase delay to avoid spam
+      reconnectionDelayMax: 5000,
+      connectTimeout: 5000,     // Add explicit timeout
     });
 
     socketInstance.on('connect', () => {
       console.log('[Socket] Connected:', socketInstance?.id);
     });
 
-    socketInstance.on('connect_error', (err) => {
-      console.error('[Socket] Connection error:', err.message);
+    socketInstance.on('connect_error', (err: any) => {
+      const errorMsg = err.message || String(err);
+      // Only log session expiry as a warning (actionable)
+      // Suppress other connection errors since they're non-critical
+      if (errorMsg === 'Session expired') {
+        console.warn('[Socket] Session expired — reconnecting');
+        return;
+      }
+      // Silently fail for other errors (network unreachable, CORS, etc.)
+      // Socket.IO will retry automatically, and polling transport will handle it
+    });
+
+    // Event listeners for real-time updates (optional)
+    socketInstance?.on('message:new', (data) => {
+      console.log('[Socket] New message:', data);
+    });
+
+    socketInstance?.on('user:typing', (data) => {
+      console.log('[Socket] User typing:', data);
     });
 
     socketRef.current = socketInstance;

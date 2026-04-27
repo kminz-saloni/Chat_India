@@ -52,6 +52,34 @@ export function clearCachedPrivateKey(): void {
     _cachedPrivateKey.fill(0); // zero out memory
     _cachedPrivateKey = null;
   }
+  // Also clear sessionStorage derived key
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem('ci_derived_key');
+  }
+}
+
+/**
+ * Store derived key in sessionStorage for session recovery across page refreshes.
+ * sessionStorage is cleared when tab closes — balances security with usability.
+ */
+export function storeDerivedKeyForSession(derivedKeyB64: string): void {
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem('ci_derived_key', derivedKeyB64);
+  }
+}
+
+/**
+ * Retrieve stored derived key if session is still active.
+ */
+export function getStoredDerivedKey(): Uint8Array | null {
+  if (typeof window === 'undefined') return null;
+  const stored = sessionStorage.getItem('ci_derived_key');
+  if (!stored) return null;
+  try {
+    return _sodium.from_base64(stored);
+  } catch {
+    return null;
+  }
 }
 
 // ─── 1. Key Generation ───────────────────────────────────────────────────────
@@ -114,7 +142,7 @@ export async function deriveKeyFromPassword(password: string, salt: Uint8Array):
 
 /**
  * Decrypts the encrypted private key bundle downloaded from the server.
- * Stores the result in the in-memory cache.
+ * Stores the result in the in-memory cache and saves the derived key to sessionStorage.
  * Throws if the password is wrong (authentication tag mismatch).
  */
 export async function decryptAndCachePrivateKey(
@@ -140,6 +168,37 @@ export async function decryptAndCachePrivateKey(
   // Store in memory only
   clearCachedPrivateKey();
   _cachedPrivateKey = privateKey;
+  
+  // Store derived key in sessionStorage for session recovery
+  storeDerivedKeyForSession(sodium.to_base64(derivedKey));
+}
+
+/**
+ * Decrypts private key using a stored derived key (from sessionStorage).
+ * Used for session recovery after page refresh without requiring password.
+ */
+export async function decryptAndCachePrivateKeyWithDerivedKey(
+  encryptedPrivateKeyB64: string,
+  derivedKey: Uint8Array,
+): Promise<void> {
+  const sodium = await getSodium();
+
+  const bundle = sodium.from_base64(encryptedPrivateKeyB64);
+  const saltLen = sodium.crypto_pwhash_SALTBYTES;
+  const nonceLen = sodium.crypto_secretbox_NONCEBYTES;
+
+  const nonce = bundle.slice(saltLen, saltLen + nonceLen);
+  const ciphertext = bundle.slice(saltLen + nonceLen);
+
+  // Decrypt using the provided derived key
+  const privateKey = sodium.crypto_secretbox_open_easy(ciphertext, nonce, derivedKey);
+  if (!privateKey) throw new Error('Session recovery failed');
+
+  clearCachedPrivateKey();
+  _cachedPrivateKey = privateKey;
+  
+  // Re-store the derived key since we cleared it
+  storeDerivedKeyForSession(sodium.to_base64(derivedKey));
 }
 
 // ─── 4. Message Encryption ───────────────────────────────────────────────────

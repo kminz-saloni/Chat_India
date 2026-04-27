@@ -31,14 +31,23 @@ export function registerSocketHandlers(io: Server): void {
   // ─── Auth middleware ────────────────────────────────────────────────────────
   io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token as string | undefined;
-    if (!token) return next(new Error('Unauthorized'));
+    console.log('[Socket] Incoming connection:', { socketId: socket.id, hasToken: !!token });
+    
+    if (!token) {
+      console.warn('[Socket] Rejected: No token provided');
+      return next(new Error('Unauthorized'));
+    }
 
     try {
       const payload = jwt.verify(token, JWT_SECRET) as { userId: string; sessionId: string };
+      console.log('[Socket] Token verified:', { userId: payload.userId, sessionId: payload.sessionId });
 
       // Validate session is still active
       const session = await Session.findOne({ _id: payload.sessionId, active: true });
-      if (!session) return next(new Error('Session expired'));
+      if (!session) {
+        console.warn(`[Socket] Session not found or inactive: ${payload.sessionId}`);
+        return next(new Error('Session expired'));
+      }
 
       // Update last active
       await Session.findByIdAndUpdate(payload.sessionId, { lastActive: new Date() });
@@ -46,7 +55,8 @@ export function registerSocketHandlers(io: Server): void {
       socket.data.userId = payload.userId;
       socket.data.sessionId = payload.sessionId;
       next();
-    } catch {
+    } catch (err) {
+      console.error('[Socket] Auth error:', err instanceof Error ? err.message : String(err));
       next(new Error('Invalid token'));
     }
   });

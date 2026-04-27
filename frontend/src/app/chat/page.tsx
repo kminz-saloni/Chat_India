@@ -368,30 +368,58 @@ export default function ChatPage() {
   async function handleVaultUnlock(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
+    
+    if (!vaultPin.trim()) {
+      toast.error('Please enter a PIN or password');
+      return;
+    }
+    
+    const userInput = vaultPin;
+    
     try {
-      // Try to unlock as PIN
-      await apiRequest('/vault/unlock', { method: 'POST', token, body: { pin: vaultPin } });
+      // Try to unlock as PIN first
+      await apiRequest('/vault/unlock', { method: 'POST', token, body: { pin: userInput } });
       setVaultUnlocked(true);
       setVaultPinPrompt(false);
       setVaultPin('');
-    } catch {
-      try {
-        // Try to unlock as Password (fallback)
-        await apiRequest('/vault/unlock', { method: 'POST', token, body: { password: vaultPin } });
-        setVaultUnlocked(true);
-        setVaultPinPrompt(false);
-        setVaultPin('');
-      } catch {
-        // If both fail, maybe they need to setup? Let's try setup if it's their first time
+      toast.success('Vault unlocked!');
+    } catch (err: any) {
+      const errorMessage = err.message || '';
+      
+      // If vault PIN not set, skip password try and go straight to setup
+      if (errorMessage.includes('Vault PIN not set')) {
         try {
-          await apiRequest('/vault/setup', { method: 'POST', token, body: { pin: vaultPin } });
+          await apiRequest('/vault/setup', { method: 'POST', token, body: { pin: userInput } });
           setVaultUnlocked(true);
           setVaultPinPrompt(false);
           setVaultPin('');
+          toast.success('✅ Vault PIN configured! You can now hide chats.');
         } catch {
-          toast.error('Invalid PIN or password');
+          toast.error('⚠️ Failed to setup vault PIN');
+          setVaultPin(''); // Clear on error for retry
         }
+        return;
       }
+      
+      // PIN failed, try password as fallback
+      if (errorMessage.includes('Invalid PIN')) {
+        try {
+          await apiRequest('/vault/unlock', { method: 'POST', token, body: { password: userInput } });
+          setVaultUnlocked(true);
+          setVaultPinPrompt(false);
+          setVaultPin('');
+          toast.success('Vault unlocked!');
+        } catch {
+          // Both PIN and password failed
+          toast.error('❌ Wrong PIN or password. Try again or cancel.');
+          setVaultPin(''); // Clear input for retry
+        }
+        return;
+      }
+      
+      // Generic error
+      toast.error('Error unlocking vault');
+      setVaultPin('');
     }
   }
 
@@ -419,23 +447,132 @@ export default function ChatPage() {
 
       {/* Vault Unlock Modal */}
       {vaultPinPrompt && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'var(--surface)', padding: 24, borderRadius: 12, width: 300 }}>
-            <h3 style={{ marginBottom: 16 }}>Unlock Vault</h3>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: 'linear-gradient(135deg, var(--surface), var(--surface-2))', padding: 32, borderRadius: 16, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(108,99,255,0.2)', border: '1px solid rgba(108,99,255,0.3)' }}>
+            <h2 style={{ marginBottom: 8, fontSize: 22, fontWeight: 700, textAlign: 'center' }}>🔐 Unlock Vault</h2>
+            <p style={{ marginBottom: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>Enter your PIN or password to access hidden chats</p>
             <form onSubmit={handleVaultUnlock}>
               <input 
                 type="password" 
-                placeholder="PIN or Password" 
+                placeholder="Enter PIN or Password" 
                 value={vaultPin}
                 onChange={e => setVaultPin(e.target.value)}
-                style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 6, color: '#fff', outline: 'none', marginBottom: 16 }}
+                style={{ 
+                  width: '100%', 
+                  padding: '14px 16px', 
+                  background: 'rgba(255,255,255,0.08)', 
+                  border: '2px solid rgba(108,99,255,0.3)', 
+                  borderRadius: 10, 
+                  color: '#fff', 
+                  outline: 'none', 
+                  marginBottom: 20,
+                  fontSize: 15,
+                  transition: 'all 0.2s',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(108,99,255,0.6)';
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                  e.currentTarget.style.boxShadow = '0 0 20px rgba(108,99,255,0.2)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(108,99,255,0.3)';
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
                 autoFocus
               />
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button type="button" onClick={() => { setVaultPinPrompt(false); setShowVault(false); }} style={{ flex: 1, padding: '10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, color: '#fff', cursor: 'pointer' }}>Cancel</button>
-                <button type="submit" style={{ flex: 1, padding: '10px', background: 'var(--primary)', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer' }}>Unlock</button>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button 
+                  type="button" 
+                  onClick={() => { setVaultPinPrompt(false); setShowVault(false); }} 
+                  style={{ 
+                    flex: 1, 
+                    padding: '14px 16px', 
+                    background: 'rgba(255,255,255,0.05)', 
+                    border: '2px solid rgba(255,255,255,0.15)', 
+                    borderRadius: 10, 
+                    color: '#fff', 
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  style={{ 
+                    flex: 1, 
+                    padding: '14px 16px', 
+                    background: 'linear-gradient(135deg, #6c63ff, #5a4ecf)', 
+                    border: 'none', 
+                    borderRadius: 10, 
+                    color: '#fff', 
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    transition: 'all 0.2s',
+                    boxShadow: '0 4px 12px rgba(108,99,255,0.3)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #7d72ff, #6c63ff)';
+                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(108,99,255,0.5)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #6c63ff, #5a4ecf)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(108,99,255,0.3)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  🔓 Unlock
+                </button>
               </div>
             </form>
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
+              <button
+                onClick={async () => {
+                  if (confirm('⚠️ This will clear your vault PIN. Are you sure?\n\nAll hidden chats will still exist but no longer be protected.')) {
+                    try {
+                      await apiRequest('/vault/reset', { method: 'POST', token });
+                      setVaultPinPrompt(false);
+                      setShowVault(false);
+                      setVaultPin('');
+                      toast.success('✅ Vault PIN cleared. Set a new one when ready.');
+                    } catch {
+                      toast.error('Failed to reset vault');
+                    }
+                  }
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--muted)',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  textDecoration: 'underline',
+                  transition: 'color 0.2s',
+                  padding: 0,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#ff6b6b';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'var(--muted)';
+                }}
+              >
+                🔄 Forgot PIN? Reset Vault
+              </button>
+            </div>
           </div>
         </div>
       )}

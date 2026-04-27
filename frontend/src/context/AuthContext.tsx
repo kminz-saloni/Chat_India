@@ -5,7 +5,9 @@ import { apiRequest } from '@/lib/api';
 import {
   generateAndEncryptKeyPair,
   decryptAndCachePrivateKey,
+  decryptAndCachePrivateKeyWithDerivedKey,
   clearCachedPrivateKey,
+  getStoredDerivedKey,
 } from '@/lib/crypto';
 
 export interface AuthUser {
@@ -53,9 +55,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedUser = localStorage.getItem('ci_user');
     if (storedToken && storedUser) {
       setToken(storedToken);
-      setUser(JSON.parse(storedUser));
-      // Private key must be re-decrypted on page refresh — prompt user
-      setCryptoReady(false);
+      const user = JSON.parse(storedUser);
+      setUser(user);
+      
+      // Try to auto-decrypt using stored derived key (survives page refresh)
+      const derivedKey = getStoredDerivedKey();
+      if (derivedKey && user.encryptedPrivateKey) {
+        decryptAndCachePrivateKeyWithDerivedKey(user.encryptedPrivateKey, derivedKey)
+          .then(() => {
+            setCryptoReady(true);
+          })
+          .catch(() => {
+            // Derived key failed, prompt for password
+            setCryptoReady(false);
+            setCryptoError('Session recovered, but please re-enter password to decrypt messages.');
+          });
+      } else {
+        // No stored derived key — prompt for password
+        setCryptoReady(false);
+      }
     }
     setLoading(false);
   }, []);

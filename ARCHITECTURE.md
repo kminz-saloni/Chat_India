@@ -116,10 +116,28 @@ Login:
       │
       ▼ Argon2id(password, salt) → derived key
       │
+      ├── Store in sessionStorage for session survival across page refreshes
+      │
       ▼ Decrypt → raw privateKey
       │
       └── Cached in-memory ONLY (cleared on logout/tab close)
+
+Page Refresh (Session Recovery):
+  Check sessionStorage for stored derived key
+      │
+      ├─ If found: Use derived key to auto-decrypt private key (no password required)
+      │              User stays logged in, messages stay decrypted during session
+      │
+      └─ If not found: Private key must be re-decrypted via password (e.g., after clearing sessionStorage)
+
+Session Logout/Panic/Timeout:
+  - Private key zeroed from memory
+  - sessionStorage derived key cleared
+  - Token removed from localStorage
+  - Full re-authentication required on next login
 ```
+
+---
 
 ### Message Encryption Flow
 

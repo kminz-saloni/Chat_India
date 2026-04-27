@@ -61,17 +61,111 @@ export default function ChatSidebar({
     }}>
       {/* Header */}
       <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <h2 className="gradient-text" style={{ fontSize: 18, fontWeight: 800 }}>
             {showVault ? '🔐 Vault' : '💬 Chats'}
           </h2>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button aria-label="Trigger Panic Lock" onClick={onPanic} title="Panic Lock" style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 14, transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>⚠️</button>
-            <button aria-label={showVault ? 'Exit Vault' : 'Enter Vault'} onClick={onToggleVault} title={showVault ? 'Exit Vault' : 'Enter Vault'} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 14, transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-              {showVault ? '🔓' : '🔐'}
+        </div>
+        {/* Action Buttons Row */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              aria-label="Trigger Panic Lock"
+              onClick={onPanic}
+              title="PANIC LOCK - Emergency Account Lock - Immediately locks your account and logs out all sessions"
+              style={{
+                flex: 1,
+                background: 'linear-gradient(135deg, #ff5555, #cc0000)',
+                border: '2px solid #ff3333',
+                cursor: 'pointer',
+                padding: '12px 16px',
+                borderRadius: 8,
+                fontSize: 15,
+                fontWeight: 700,
+                color: 'white',
+                transition: 'all 0.25s',
+                boxShadow: '0 4px 15px rgba(255, 85, 85, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)',
+                textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                letterSpacing: '0.5px',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(255, 85, 85, 0.6), inset 0 1px 0 rgba(255,255,255,0.2)';
+                e.currentTarget.style.background = 'linear-gradient(135deg, #ff6666, #dd0000)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.boxShadow = '0 4px 15px rgba(255, 85, 85, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)';
+                e.currentTarget.style.background = 'linear-gradient(135deg, #ff5555, #cc0000)';
+              }}
+            >
+              ⚠️ PANIC LOCK
             </button>
-            <a href="/settings/sessions" aria-label="Settings" style={{ fontSize: 14, color: 'var(--muted)', textDecoration: 'none', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'rotate(30deg)'} onMouseLeave={e => e.currentTarget.style.transform = 'rotate(0)'}>⚙️</a>
+            <button
+              aria-label={showVault ? 'Exit Vault' : 'Enter Hidden Vault'}
+              onClick={onToggleVault}
+              title={showVault ? 'Exit from Vault' : 'Enter Hidden Vault - Access private hidden chats'}
+              style={{
+                flex: 1,
+                background: showVault ? 'linear-gradient(135deg, #ffd700, #ffaa00)' : 'linear-gradient(135deg, #6c63ff, #5a4ecf)',
+                border: showVault ? '2px solid #ffcc00' : '2px solid #5a4ecf',
+                cursor: 'pointer',
+                padding: '12px 16px',
+                borderRadius: 8,
+                fontSize: 15,
+                fontWeight: 700,
+                color: 'white',
+                transition: 'all 0.25s',
+                boxShadow: showVault ? '0 4px 15px rgba(255, 215, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)' : '0 4px 15px rgba(108, 99, 255, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)',
+                textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                letterSpacing: '0.5px',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                e.currentTarget.style.boxShadow = showVault ? '0 6px 20px rgba(255, 215, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.2)' : '0 6px 20px rgba(108, 99, 255, 0.6), inset 0 1px 0 rgba(255,255,255,0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.boxShadow = showVault ? '0 4px 15px rgba(255, 215, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)' : '0 4px 15px rgba(108, 99, 255, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)';
+              }}
+            >
+              {showVault ? '🔓 EXIT VAULT' : '🔐 VAULT'}
+            </button>
           </div>
+          <a
+            href="/settings/sessions"
+            aria-label="Open Settings and Sessions Management"
+            title="Settings and Session Management - View active devices and logout other sessions"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'linear-gradient(135deg, #4a9eff, #2563eb)',
+              color: 'white',
+              padding: '12px 16px',
+              borderRadius: 8,
+              fontSize: 15,
+              fontWeight: 700,
+              textDecoration: 'none',
+              transition: 'all 0.25s',
+              boxShadow: '0 4px 15px rgba(74, 158, 255, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)',
+              textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+              letterSpacing: '0.5px',
+              width: '100%',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(74, 158, 255, 0.6), inset 0 1px 0 rgba(255,255,255,0.2)';
+              e.currentTarget.style.background = 'linear-gradient(135deg, #5aa5ff, #3b82f6)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 15px rgba(74, 158, 255, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)';
+              e.currentTarget.style.background = 'linear-gradient(135deg, #4a9eff, #2563eb)';
+            }}
+          >
+            ⚙️ SETTINGS
+          </a>
         </div>
         {/* Search */}
         <input

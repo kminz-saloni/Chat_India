@@ -156,3 +156,18 @@ export async function triggerPanic(req: AuthRequest, res: Response): Promise<voi
 
   res.json({ success: true });
 }
+
+// ─── POST /vault/reset ────────────────────────────────────────────────────────
+export async function resetVault(req: AuthRequest, res: Response): Promise<void> {
+  const user = await User.findById(req.userId);
+  if (!user) {
+    res.status(404).json({ message: 'User not found' });
+    return;
+  }
+
+  // Clear vault PIN
+  user.vaultPinHash = undefined;
+  await user.save();
+
+  res.json({ success: true, message: 'Vault PIN cleared. You can set a new one anytime.' });
+}
