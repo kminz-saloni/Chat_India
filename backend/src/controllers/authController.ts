@@ -32,10 +32,11 @@ export async function requestOtp(req: Request, res: Response): Promise<void> {
   // For development, return OTP in response
   console.log(`[DEV] OTP for ${phone}: ${otp}`);
 
+  const showOtpInProd = process.env.SHOW_OTP_IN_PROD === 'true';
+
   res.json({
     message: 'OTP sent successfully',
-    // Remove this in production:
-    ...(process.env.NODE_ENV !== 'production' && { devOtp: otp }),
+    ...(process.env.NODE_ENV !== 'production' || showOtpInProd ? { devOtp: otp } : {}),
   });
 }
 
