@@ -7,6 +7,6 @@
     }
   ],
   "env": {
-    "BACKEND_URL": "@backend_url"
+    "BACKEND_URL": "https://chatindia-backend.azurewebsites.net"
   }
 }
