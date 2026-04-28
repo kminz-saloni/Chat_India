@@ -406,12 +406,13 @@ export default function MessageArea({
 }
 
 function MessageBubble({ 
-  msg, isMine, text, currentUserId, onEdit, onDelete, onReact,
+  msg, isMine, text, currentUserId, onEdit, onDelete, onReact, onReply,
 }: { 
   msg: Message; isMine: boolean; text?: string; currentUserId: string;
   onEdit: (text: string) => void;
   onDelete: () => void;
   onReact: (emoji: string) => void;
+  onReply: () => void;
 }) {
   const isOpt = msg._id.startsWith('opt-');
   const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
