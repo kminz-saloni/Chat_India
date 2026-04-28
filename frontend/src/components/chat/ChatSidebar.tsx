@@ -23,10 +23,15 @@ export default function ChatSidebar({
   chats, activeChatId, onSelectChat, loading, onlineUsers, token, onChatCreated,
   showVault, onToggleVault, onMoveToVault, onPanic,
 }: Props) {
+  const totalUnread = chats.reduce((sum, chat) => sum + (chat.unread ?? 0), 0);
   const [newChatPhone, setNewChatPhone] = useState('');
   const [newChatName, setNewChatName] = useState('');
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editChatId, setEditChatId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   async function handleCreateNewChat(e: React.FormEvent) {
     e.preventDefault();
@@ -73,6 +78,34 @@ export default function ChatSidebar({
     }
   }
 
+  async function handleSaveCustomName(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editChatId) return;
+    if (!editName.trim()) {
+      toast.error('Please enter a custom name');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      await apiRequest(`/chats/${editChatId}/custom-name`, {
+        method: 'PATCH',
+        token,
+        body: { customName: editName.trim() },
+      });
+      toast.success('Custom name updated');
+      setShowEditModal(false);
+      setEditChatId(null);
+      setEditName('');
+      onChatCreated();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update name';
+      toast.error(message);
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   return (
     <div style={{
       width: 320, flexShrink: 0,
@@ -83,9 +116,28 @@ export default function ChatSidebar({
       {/* Header */}
       <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <h2 className="gradient-text" style={{ fontSize: 18, fontWeight: 800 }}>
-            {showVault ? '🔐 Vault' : '💬 Chats'}
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 className="gradient-text" style={{ fontSize: 18, fontWeight: 800 }}>
+              {showVault ? '🔐 Vault' : '💬 Chats'}
+            </h2>
+            {!showVault && totalUnread > 0 && (
+              <span style={{
+                minWidth: 18,
+                height: 18,
+                borderRadius: 999,
+                padding: '0 6px',
+                background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                color: '#fff',
+                fontSize: 10,
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                {totalUnread > 99 ? '99+' : totalUnread}
+              </span>
+            )}
+          </div>
         </div>
         {/* Action Buttons Row */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
@@ -383,15 +435,94 @@ export default function ChatSidebar({
               onClick={() => onSelectChat(chat)}
               onMoveToVault={onMoveToVault ? () => onMoveToVault(chat._id) : undefined}
               inVault={showVault}
+              onEditName={() => {
+                setEditChatId(chat._id);
+                setEditName(chat.contact?.name ?? '');
+                setShowEditModal(true);
+              }}
             />
           ))
         )}
       </div>
+
+      {/* Edit Custom Name Modal */}
+      {showEditModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: 'linear-gradient(135deg, var(--surface), var(--surface-2))', padding: 32, borderRadius: 16, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(108,99,255,0.2)', border: '1px solid rgba(108,99,255,0.3)' }}>
+            <h2 style={{ marginBottom: 8, fontSize: 22, fontWeight: 700, textAlign: 'center' }}>✏️ Edit Contact Name</h2>
+            <p style={{ marginBottom: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>Update the custom name shown only to you</p>
+            <form onSubmit={handleSaveCustomName}>
+              <input
+                type="text"
+                placeholder="Custom name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  background: 'rgba(243,245,251,0.12)',
+                  border: '2px solid rgba(108,99,255,0.45)',
+                  borderRadius: 10,
+                  color: 'var(--foreground)',
+                  outline: 'none',
+                  marginBottom: 20,
+                  fontSize: 15,
+                  transition: 'all 0.2s',
+                }}
+                autoFocus
+              />
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditChatId(null);
+                    setEditName('');
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '14px 16px',
+                    background: 'rgba(243,245,251,0.1)',
+                    border: '2px solid rgba(243,245,251,0.3)',
+                    borderRadius: 10,
+                    color: 'var(--foreground)',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  style={{
+                    flex: 1,
+                    padding: '14px 16px',
+                    background: 'linear-gradient(135deg, #6c63ff, #5a4ecf)',
+                    border: 'none',
+                    borderRadius: 10,
+                    color: '#fff',
+                    cursor: savingEdit ? 'not-allowed' : 'pointer',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    transition: 'all 0.2s',
+                    opacity: savingEdit ? 0.7 : 1,
+                  }}
+                >
+                  {savingEdit ? '⏳ Saving...' : '✅ Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function ChatRow({ chat, active, online, onClick, onMoveToVault, inVault }: { chat: ChatItem; active: boolean; online: boolean; onClick: () => void; onMoveToVault?: () => void; inVault?: boolean }) {
+function ChatRow({ chat, active, online, onClick, onMoveToVault, inVault, onEditName }: { chat: ChatItem; active: boolean; online: boolean; onClick: () => void; onMoveToVault?: () => void; inVault?: boolean; onEditName?: () => void }) {
   const name = chat.contact?.name ?? 'Unknown';
   const time = chat.updatedAt ? new Date(chat.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   const unread = chat.unread ?? 0;
@@ -473,6 +604,29 @@ function ChatRow({ chat, active, online, onClick, onMoveToVault, inVault }: { ch
             }}
           >
             {inVault ? "Remove" : "Move to Vault"}
+          </button>
+        )}
+        {hovered && onEditName && !inVault && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEditName();
+            }}
+            title="Edit custom name"
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              background: 'var(--surface-2)',
+              border: '1px solid var(--border)',
+              borderRadius: 4,
+              padding: '2px 6px',
+              fontSize: 10,
+              cursor: 'pointer',
+              color: 'var(--foreground)'
+            }}
+          >
+            Rename
           </button>
         )}
       </div>

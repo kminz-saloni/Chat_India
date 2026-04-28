@@ -59,7 +59,7 @@ export async function createOrGetChat(req: AuthRequest, res: Response): Promise<
   if (customName) {
     const currentUser = await User.findById(req.userId);
     if (currentUser) {
-      currentUser.customContactNames[String(other)] = customName;
+      currentUser.customContactNames.set(other.toString(), customName);
       await currentUser.save();
     }
   }
@@ -87,11 +87,11 @@ export async function getMyChats(req: AuthRequest, res: Response): Promise<void>
     },
     { $group: { _id: '$chatId', count: { $sum: 1 } } },
   ]);
-  const unreadByChat = new Map(unreadAgg.map((item) => [String(item._id), item.count]));
+  const unreadByChat = new Map(unreadAgg.map((item) => [item._id.toString(), item.count]));
 
   // Get current user's custom contact names
   const currentUser = await User.findById(req.userId).select('customContactNames');
-  const customNames = currentUser?.customContactNames || {};
+  const customNames = currentUser?.customContactNames;
 
   // Hydrate each chat with the other member's profile
   const hydratedChats = await Promise.all(
@@ -101,15 +101,15 @@ export async function getMyChats(req: AuthRequest, res: Response): Promise<void>
         ? await User.findById(otherId).select('_id name phone publicKey')
         : null;
       // Use custom name if available, otherwise use global name
-      const displayName = (other && customNames[String(otherId)]) || other?.name || 'Unknown';
+      const displayName = (other && customNames?.get(otherId?.toString() || '')) || other?.name || 'Unknown';
       return {
         _id: chat._id,
         type: chat.type,
         updatedAt: chat.updatedAt,
         lastMessage: chat.lastMessage,
-        unread: unreadByChat.get(String(chat._id)) ?? 0,
+        unread: unreadByChat.get(chat._id.toString()) ?? 0,
         inVault: chat.vaultEnabledFor.some((id) => id.toString() === req.userId),
-        contactOnline: otherId ? isOnline(String(otherId)) : false,
+        contactOnline: otherId ? isOnline(otherId.toString()) : false,
         contact: other ? { ...other.toObject(), name: displayName } : null,
       };
     }),
@@ -121,9 +121,50 @@ export async function getMyChats(req: AuthRequest, res: Response): Promise<void>
   res.json({ chats: mainChats });
 }
 
+// ─── PATCH /chats/:chatId/custom-name ───────────────────────────────────────
+export async function updateCustomName(req: AuthRequest, res: Response): Promise<void> {
+  const { chatId } = req.params;
+  const { customName } = req.body;
+
+  if (!customName || typeof customName !== 'string') {
+    res.status(400).json({ message: 'customName is required' });
+    return;
+  }
+
+  const me = new mongoose.Types.ObjectId(req.userId);
+  const chat = await Chat.findOne({ _id: chatId, members: me });
+  if (!chat) {
+    res.status(404).json({ message: 'Chat not found' });
+    return;
+  }
+
+  const otherId = chat.members.find((m) => m.toString() !== req.userId);
+  if (!otherId) {
+    res.status(400).json({ message: 'Unable to resolve contact for chat' });
+    return;
+  }
+
+  const currentUser = await User.findById(req.userId);
+  if (!currentUser) {
+    res.status(404).json({ message: 'User not found' });
+    return;
+  }
+
+  currentUser.customContactNames.set(otherId.toString(), customName.trim());
+  await currentUser.save();
+
+  res.json({ success: true });
+}
+
 // ─── POST /messages ───────────────────────────────────────────────────────────
 export async function sendMessage(req: AuthRequest, res: Response): Promise<void> {
-  const { chatId, ciphertext, senderCiphertext, selfDestructAt, panicPhraseCandidate } = req.body;
+  const {
+    chatId,
+    ciphertext,
+    senderCiphertext,
+    selfDestructAt,
+    panicPhraseCandidate,
+  } = req.body;
   if (!chatId || !ciphertext) {
     res.status(400).json({ message: 'chatId and ciphertext are required' });
     return;
@@ -152,7 +193,7 @@ export async function sendMessage(req: AuthRequest, res: Response): Promise<void
 
   // Realtime delivery to all chat members
   emitNewMessage(io, chatId, message);
-  const memberIds = chat.members.map((memberId) => String(memberId));
+  const memberIds = chat.members.map((memberId) => memberId.toString());
   const recipientIds = memberIds.filter((memberId) => memberId !== req.userId);
   emitNewMessageToUsers(io, recipientIds, message);
 

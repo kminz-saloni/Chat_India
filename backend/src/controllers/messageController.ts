@@ -9,7 +9,7 @@ import { emitMessageUpdate } from '@/socket/handlers';
 // ─── PATCH /messages/:id ──────────────────────────────────────────────────────
 export async function editMessage(req: AuthRequest, res: Response): Promise<void> {
   const { id } = req.params;
-  const { ciphertext } = req.body;
+  const { ciphertext, senderCiphertext } = req.body;
 
   if (!ciphertext) {
     res.status(400).json({ message: 'ciphertext is required' });
@@ -33,6 +33,9 @@ export async function editMessage(req: AuthRequest, res: Response): Promise<void
   }
 
   message.ciphertext = ciphertext;
+  if (senderCiphertext !== undefined) {
+    message.senderCiphertext = senderCiphertext;
+  }
   message.edited = true;
   await message.save();
 
@@ -41,6 +44,7 @@ export async function editMessage(req: AuthRequest, res: Response): Promise<void
     type: 'edit',
     messageId: message._id,
     ciphertext,
+    senderCiphertext: senderCiphertext ?? undefined,
     edited: true
   });
 

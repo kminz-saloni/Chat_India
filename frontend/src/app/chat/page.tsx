@@ -221,12 +221,26 @@ export default function ChatPage() {
           if (m._id !== update.messageId) return m;
           
           if (update.type === 'edit') {
-            if (cryptoReady && update.ciphertext) {
-              decrypt(update.ciphertext)
+            const isMine = m.senderId === user?.id;
+            const hasSenderCiphertext = Boolean(update.senderCiphertext);
+            const ciphertextToUse =
+              isMine && hasSenderCiphertext
+                ? update.senderCiphertext
+                : !isMine
+                  ? update.ciphertext
+                  : undefined;
+
+            if (cryptoReady && ciphertextToUse) {
+              decrypt(ciphertextToUse)
                 .then((pt) => setDecryptedCache((c) => ({ ...c, [m._id]: pt })))
                 .catch(() => setDecryptedCache((c) => ({ ...c, [m._id]: '[Encrypted]' })));
             }
-            return { ...m, ciphertext: update.ciphertext, edited: true };
+            return {
+              ...m,
+              ciphertext: update.ciphertext ?? m.ciphertext,
+              senderCiphertext: update.senderCiphertext ?? m.senderCiphertext,
+              edited: true,
+            };
           }
           if (update.type === 'delete') {
             return { ...m, deleted: true, ciphertext: '', edited: false, reactions: [] };
@@ -334,7 +348,10 @@ export default function ChatPage() {
     } catch { /* noop */ } finally { setMsgsLoading(false); }
   }
 
-  async function handleSendMessage(plaintext: string, expirySeconds?: number) {
+  async function handleSendMessage(
+    plaintext: string,
+    expirySeconds?: number,
+  ) {
     if (!activeChatId || !activeContact?.publicKey || !user?.publicKey || !token) return;
     const { encryptAndPackMessage } = await import('@/lib/crypto');
     
@@ -355,6 +372,7 @@ export default function ChatPage() {
       chatId: activeChatId,
       senderId: user?.id ?? '',
       ciphertext,
+      senderCiphertext,
       status: 'sent',
       createdAt: new Date().toISOString(),
       deleted: false,
@@ -370,7 +388,13 @@ export default function ChatPage() {
       const data = await apiRequest<{ message: Message; panicTriggered?: boolean }>('/messages', {
         method: 'POST',
         token,
-        body: { chatId: activeChatId, ciphertext, senderCiphertext, selfDestructAt, panicPhraseCandidate },
+        body: {
+          chatId: activeChatId,
+          ciphertext,
+          senderCiphertext,
+          selfDestructAt,
+          panicPhraseCandidate,
+        },
       });
       // Replace optimistic with real or remove optimistic if socket already added it
       setMessages((prev) => {
@@ -399,19 +423,20 @@ export default function ChatPage() {
   }
 
   async function handleEditMessage(messageId: string, newPlaintext: string) {
-    if (!activeContact?.publicKey || !token) return;
+    if (!activeContact?.publicKey || !user?.publicKey || !token) return;
     const { encryptAndPackMessage } = await import('@/lib/crypto');
     const ciphertext = await encryptAndPackMessage(newPlaintext, activeContact.publicKey);
+    const senderCiphertext = await encryptAndPackMessage(newPlaintext, user.publicKey);
     
     // Optimistic
     setDecryptedCache((prev) => ({ ...prev, [messageId]: newPlaintext }));
-    setMessages((prev) => prev.map(m => m._id === messageId ? { ...m, edited: true } : m));
+    setMessages((prev) => prev.map(m => m._id === messageId ? { ...m, edited: true, senderCiphertext } : m));
     
     try {
       await apiRequest(`/messages/${messageId}`, {
         method: 'PATCH',
         token,
-        body: { ciphertext },
+        body: { ciphertext, senderCiphertext },
       });
     } catch { /* noop */ }
   }
@@ -797,7 +822,9 @@ export default function ChatPage() {
           onEdit={handleEditMessage}
           onDelete={handleDeleteMessage}
           onReact={handleReactMessage}
-          onBack={isMobile ? () => setActiveChatId(null) : undefined}
+          onBack={() => setActiveChatId(null)}
+          showVault={showVault}
+          onExitVault={showVault ? () => { setShowVault(false); setVaultUnlocked(false); } : undefined}
         />
         </div>
       </div>

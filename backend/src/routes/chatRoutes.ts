@@ -6,6 +6,7 @@ import {
   getMyChats,
   sendMessage,
   getMessages,
+  updateCustomName,
 } from '@/controllers/chatController';
 
 const router = Router();
@@ -19,6 +20,7 @@ router.get('/users/search', searchUsers);
 router.post('/chats', createOrGetChat);
 router.get('/chats', getMyChats);
 router.get('/chats/:chatId/messages', getMessages);
+router.patch('/chats/:chatId/custom-name', updateCustomName);
 
 // Messages
 router.post('/messages', sendMessage);

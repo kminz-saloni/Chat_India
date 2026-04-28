@@ -9,7 +9,7 @@ export interface IUser extends Document {
   vaultPinHash?: string;
   panicSecretHash?: string;
   panicLocked: boolean;
-  customContactNames: Record<string, string>;
+  customContactNames: Map<string, string>;
   createdAt: Date;
   deletedAt?: Date;
 }

@@ -13,25 +13,34 @@ interface Props {
   loading: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
-  onSend: (text: string, expirySeconds?: number) => Promise<void>;
+  onSend: (
+    text: string,
+    expirySeconds?: number,
+    replyTo?: { messageId: string; previewText: string; senderId: string } | null,
+  ) => Promise<void>;
   onTypingStart: () => void;
   onTypingStop: () => void;
   onEdit: (id: string, text: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onReact: (id: string, emoji: string) => Promise<void>;
   onBack?: () => void;
+  showVault?: boolean;
+  onExitVault?: () => void;
 }
 
 export default function MessageArea({
   chat, messages, decryptedCache, currentUserId,
   isOnline, isTyping, loading, hasMore,
   onLoadMore, onSend, onTypingStart, onTypingStop,
-  onEdit, onDelete, onReact, onBack,
+  onEdit, onDelete, onReact, onBack, showVault, onExitVault,
 }: Props) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [expirySeconds, setExpirySeconds] = useState<number>(0);
+  const [customExpirySeconds, setCustomExpirySeconds] = useState<string>('');
+  const [customExpiryUnit, setCustomExpiryUnit] = useState<'seconds' | 'minutes' | 'hours'>('seconds');
   const [editMessageId, setEditMessageId] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<{ messageId: string; previewText: string; senderId: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -47,6 +56,10 @@ export default function MessageArea({
     prevMessageCount.current = messages.length;
   }, [messages.length]);
 
+  useEffect(() => {
+    setReplyTo(null);
+  }, [chat?._id]);
+
   const handleInput = useCallback((val: string) => {
     setInput(val);
     onTypingStart();
@@ -58,6 +71,19 @@ export default function MessageArea({
     e.preventDefault();
     const text = input.trim();
     if (!text || sending) return;
+
+    const resolvedExpirySeconds = expirySeconds === -1
+      ? Math.max(
+          0,
+          Math.floor(Number(customExpirySeconds)) *
+            (customExpiryUnit === 'hours' ? 3600 : customExpiryUnit === 'minutes' ? 60 : 1),
+        )
+      : expirySeconds;
+
+    if (expirySeconds === -1 && (!customExpirySeconds || resolvedExpirySeconds <= 0)) {
+      return;
+    }
+
     setInput('');
     onTypingStop();
     setSending(true);
@@ -66,7 +92,8 @@ export default function MessageArea({
         await onEdit(editMessageId, text);
         setEditMessageId(null);
       } else {
-        await onSend(text, expirySeconds > 0 ? expirySeconds : undefined);
+        await onSend(text, resolvedExpirySeconds > 0 ? resolvedExpirySeconds : undefined, replyTo);
+        setReplyTo(null);
       }
     } finally {
       setSending(false);
@@ -143,6 +170,15 @@ export default function MessageArea({
           </p>
         </div>
         <div style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          {onExitVault && (
+            <button
+              onClick={onExitVault}
+              style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--foreground)', cursor: 'pointer', fontSize: 11, padding: '4px 8px', borderRadius: 10 }}
+              title="Back to chat list"
+            >
+              Back to Chats
+            </button>
+          )}
           <button onClick={() => { setShowSearch(!showSearch); setSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 16 }} title="Search chat">🔍</button>
           🔒 E2EE
         </div>
@@ -215,6 +251,10 @@ export default function MessageArea({
                   text={text} 
                   currentUserId={currentUserId}
                   onEdit={(text) => { setEditMessageId(msg._id); setInput(text); }}
+                  onReply={() => {
+                    const previewText = text ?? '[Encrypted]';
+                    setReplyTo({ messageId: msg._id, previewText, senderId: msg.senderId });
+                  }}
                   onDelete={() => onDelete(msg._id)}
                   onReact={(emoji) => onReact(msg._id, emoji)}
                 />
@@ -230,6 +270,12 @@ export default function MessageArea({
         <div style={{ padding: '8px 16px', background: 'rgba(108,99,255,0.1)', color: 'var(--muted)', fontSize: 13, display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)' }}>
           <span>Editing message</span>
           <button onClick={() => { setEditMessageId(null); setInput(''); }} style={{ background: 'none', border: 'none', color: 'var(--foreground)', cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
+      {replyTo && !editMessageId && (
+        <div style={{ padding: '8px 16px', background: 'rgba(34,197,94,0.08)', color: 'var(--muted)', fontSize: 13, display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)' }}>
+          <span>Replying to: {replyTo.previewText.slice(0, 80)}</span>
+          <button onClick={() => setReplyTo(null)} style={{ background: 'none', border: 'none', color: 'var(--foreground)', cursor: 'pointer' }}>✕</button>
         </div>
       )}
       <form
@@ -295,8 +341,49 @@ export default function MessageArea({
               <option value={10}>⏳ 10s</option>
               <option value={60}>⏳ 1m</option>
               <option value={3600}>⏳ 1h</option>
+              <option value={-1}>⏳ Custom</option>
             </select>
             <span style={{ position: 'absolute', right: 10, top: 14, pointerEvents: 'none', fontSize: 10 }}>▼</span>
+            {expirySeconds === -1 && (
+              <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="Amount"
+                  value={customExpirySeconds}
+                  onChange={(e) => setCustomExpirySeconds(e.target.value)}
+                  style={{
+                    flex: 1,
+                    background: 'rgba(243,245,251,0.14)',
+                    border: '1px solid rgba(243,245,251,0.24)',
+                    color: '#fff',
+                    height: 36,
+                    borderRadius: 10,
+                    padding: '0 10px',
+                    fontSize: 12,
+                    outline: 'none',
+                  }}
+                />
+                <select
+                  value={customExpiryUnit}
+                  onChange={(e) => setCustomExpiryUnit(e.target.value as 'seconds' | 'minutes' | 'hours')}
+                  style={{
+                    background: 'rgba(243,245,251,0.14)',
+                    border: '1px solid rgba(243,245,251,0.24)',
+                    color: '#fff',
+                    height: 36,
+                    borderRadius: 10,
+                    padding: '0 10px',
+                    fontSize: 12,
+                    outline: 'none',
+                  }}
+                >
+                  <option value="seconds">sec</option>
+                  <option value="minutes">min</option>
+                  <option value="hours">hr</option>
+                </select>
+              </div>
+            )}
           </div>
         )}
         <button
@@ -319,7 +406,7 @@ export default function MessageArea({
 }
 
 function MessageBubble({ 
-  msg, isMine, text, currentUserId, onEdit, onDelete, onReact 
+  msg, isMine, text, currentUserId, onEdit, onDelete, onReact,
 }: { 
   msg: Message; isMine: boolean; text?: string; currentUserId: string;
   onEdit: (text: string) => void;
